@@ -60,11 +60,11 @@ const HotelMap = ({ hotels = [] }) => {
     {
       id: 'haendeldenkmal',
       name: language === 'de' ? 'Händeldenkmal' : 'Händel Monument',
-      position: [51.4833, 11.9694], // Marktplatz - verified
+      position: [51.4826, 11.9703], // Marktplatz - exact OpenStreetMap coordinates
       icon: monumentIcon,
       description: language === 'de'
-        ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz'
-        : 'Bronze statue of George Frideric Handel on the market square'
+        ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz (1859)'
+        : 'Bronze statue of George Frideric Handel on the market square (1859)'
     },
     {
       id: 'bahnhof',
