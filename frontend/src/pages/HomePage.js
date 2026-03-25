@@ -5,8 +5,9 @@ import { motion } from 'framer-motion';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HotelCard from '../components/HotelCard';
+import HotelMap from '../components/HotelMap';
 import { Button } from '../components/ui/button';
-import { Music, Users, Calendar, MapPin, ArrowDown, Loader2 } from 'lucide-react';
+import { Music, Users, Calendar, MapPin, ArrowDown, Loader2, Map } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -178,6 +179,34 @@ const HomePage = () => {
               {language === 'de' ? 'Keine Hotels verfügbar.' : 'No hotels available.'}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Map Section */}
+      <section id="map" className="py-20 bg-[#F5F2EA]" data-testid="map-section">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <span className="text-[#D4AF37] text-sm font-semibold tracking-[0.2em] uppercase">
+              {language === 'de' ? 'Lage' : 'Location'}
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl text-[#1A1A1A] mt-2 mb-4">
+              {language === 'de' ? 'Übersichtskarte' : 'Overview Map'}
+            </h2>
+            <p className="text-[#4A4A4A] max-w-2xl mx-auto">
+              {language === 'de' 
+                ? 'Alle Hotels sind fußläufig zur Händelhalle und zum Hauptbahnhof gelegen.'
+                : 'All hotels are within walking distance to Händelhalle and the main train station.'}
+            </p>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            viewport={{ once: true }}
+          >
+            <HotelMap hotels={hotels} />
+          </motion.div>
         </div>
       </section>
 
