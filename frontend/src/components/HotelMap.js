@@ -43,14 +43,14 @@ const HotelMap = ({ hotels = [] }) => {
   const { language } = useLanguage();
 
   // Halle (Saale) center - balanced to show all POIs
-  const center = [51.4815, 11.9770];
+  const center = [51.4810, 11.9730];
 
   // Points of interest with verified coordinates
   const landmarks = [
     {
       id: 'haendelhalle',
       name: language === 'de' ? 'Händelhalle (Veranstaltungsort)' : 'Händelhalle (Venue)',
-      position: [51.4850, 11.9750], // Salzgrafenplatz 1
+      position: [51.4817, 11.9643], // Salzgrafenplatz 1 - verified OpenStreetMap
       icon: venueIcon,
       description: language === 'de' 
         ? 'Konzerthaus und Veranstaltungsort für Happy Birthday Händel'
@@ -78,10 +78,10 @@ const HotelMap = ({ hotels = [] }) => {
 
   // Hotel coordinates - verified from search results and OpenStreetMap
   const hotelCoordinates = {
-    'b&b': [51.4817, 11.9656],      // Hallorenring 9 - near Marktkirche in center
+    'b&b': [51.4817, 11.9656],      // Hallorenring 9 - near Händelhalle
     'bb': [51.4817, 11.9656],       // Alternative match
-    'ankerhof': [51.4824, 11.9621], // Ankerstraße 2a - on Saale river (51°28'56"N, 11°57'43"E)
-    'dorint': [51.4772, 11.9825]    // Dorotheenstraße 12 - near Riebeckplatz/Hauptbahnhof
+    'ankerhof': [51.4824, 11.9621], // Ankerstraße 2a - on Saale river
+    'dorint': [51.4799, 11.9811]    // Dorotheenstraße 12 - verified GPS
   };
 
   const getHotelPosition = (hotel) => {
