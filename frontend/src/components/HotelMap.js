@@ -61,7 +61,7 @@ const HotelMap = ({ hotels = [] }) => {
       id: 'haendeldenkmal',
       name: language === 'de' ? 'Händeldenkmal' : 'Händel Monument',
       position: [51.4826, 11.9703], // Marktplatz - exact OpenStreetMap coordinates
-      icon: monumentIcon,
+      icon: venueIcon,
       description: language === 'de'
         ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz (1859)'
         : 'Bronze statue of George Frideric Handel on the market square (1859)'
@@ -79,7 +79,7 @@ const HotelMap = ({ hotels = [] }) => {
       id: 'marktkirche',
       name: language === 'de' ? 'Marktkirche Unser Lieben Frauen' : 'Market Church',
       position: [51.4826, 11.9681], // Verified - Marktplatz
-      icon: churchIcon,
+      icon: venueIcon,
       description: language === 'de'
         ? 'Historische Kirche, in der Händel getauft wurde'
         : 'Historic church where Händel was baptized'
@@ -173,19 +173,11 @@ const HotelMap = ({ hotels = [] }) => {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#D4AF37] rounded-full"></span>
-            <span>{language === 'de' ? 'Händelhalle' : 'Händelhalle'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-4 h-4 bg-[#8B4513] rounded-full"></span>
-            <span>{language === 'de' ? 'Händeldenkmal' : 'Händel Monument'}</span>
+            <span>{language === 'de' ? 'Händel-Sehenswürdigkeiten' : 'Händel Sights'}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#1A1A1A] rounded-full"></span>
             <span>{language === 'de' ? 'Bahnhof' : 'Train Station'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-4 h-4 bg-[#4A4A4A] rounded-full"></span>
-            <span>{language === 'de' ? 'Marktkirche' : 'Market Church'}</span>
           </div>
         </div>
       </div>
