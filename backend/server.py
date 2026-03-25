@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -23,6 +23,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
+import requests
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -42,6 +43,51 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', 465))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'info@travel-events.de')
+
+# Object Storage Config
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+APP_NAME = "hbh-hotels"
+storage_key = None
+
+def init_storage():
+    """Initialize storage and get reusable storage key."""
+    global storage_key
+    if storage_key:
+        return storage_key
+    try:
+        resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+        resp.raise_for_status()
+        storage_key = resp.json()["storage_key"]
+        return storage_key
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
+        return None
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    """Upload file to storage."""
+    key = init_storage()
+    if not key:
+        raise Exception("Storage not initialized")
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def get_object(path: str) -> tuple:
+    """Download file from storage."""
+    key = init_storage()
+    if not key:
+        raise Exception("Storage not initialized")
+    resp = requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key}, timeout=60
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 # Create the main app
 app = FastAPI(title="Happy Birthday Händel - Hotel Booking")
@@ -1020,6 +1066,127 @@ async def seed_hotels():
     
     await db.hotels.insert_many(hotels)
     return {"message": "Hotels seeded successfully", "count": len(hotels)}
+
+# ============== IMAGE MANAGER ==============
+
+MIME_TYPES = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "gif": "image/gif", "webp": "image/webp"
+}
+
+@api_router.post("/admin/images/upload")
+async def admin_upload_image(
+    file: UploadFile = File(...),
+    hotel_id: Optional[str] = None,
+    admin: dict = Depends(get_current_admin)
+):
+    """Upload an image to storage."""
+    # Validate file type
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    if ext not in MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: jpg, jpeg, png, gif, webp")
+    
+    # Read file data
+    data = await file.read()
+    
+    # Max 5MB
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Max 5MB allowed.")
+    
+    # Generate unique path
+    file_id = str(uuid.uuid4())
+    path = f"{APP_NAME}/images/{file_id}.{ext}"
+    
+    try:
+        result = put_object(path, data, MIME_TYPES[ext])
+        
+        # Store in database
+        image_doc = {
+            "id": file_id,
+            "storage_path": result["path"],
+            "original_filename": file.filename,
+            "content_type": MIME_TYPES[ext],
+            "size": result.get("size", len(data)),
+            "hotel_id": hotel_id,
+            "is_deleted": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.images.insert_one(image_doc)
+        
+        return {
+            "id": file_id,
+            "path": result["path"],
+            "filename": file.filename,
+            "size": result.get("size", len(data))
+        }
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@api_router.get("/images/{image_id}")
+async def get_image(image_id: str, auth: str = Query(None)):
+    """Get image by ID. Supports query param auth for img tags."""
+    # Find image in database
+    image = await db.images.find_one({"id": image_id, "is_deleted": False}, {"_id": 0})
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    try:
+        data, content_type = get_object(image["storage_path"])
+        return Response(content=data, media_type=image.get("content_type", content_type))
+    except Exception as e:
+        logger.error(f"Failed to get image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve image")
+
+@api_router.get("/admin/images")
+async def admin_list_images(
+    hotel_id: Optional[str] = None,
+    admin: dict = Depends(get_current_admin)
+):
+    """List all images, optionally filtered by hotel."""
+    query = {"is_deleted": False}
+    if hotel_id:
+        query["hotel_id"] = hotel_id
+    
+    images = await db.images.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return images
+
+@api_router.delete("/admin/images/{image_id}")
+async def admin_delete_image(image_id: str, admin: dict = Depends(get_current_admin)):
+    """Soft delete an image."""
+    result = await db.images.update_one(
+        {"id": image_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return {"message": "Image deleted"}
+
+@api_router.put("/admin/hotels/{hotel_id}/images")
+async def admin_update_hotel_images(
+    hotel_id: str,
+    image_ids: List[str],
+    admin: dict = Depends(get_current_admin)
+):
+    """Update hotel images by setting image IDs."""
+    # Generate image URLs
+    image_urls = [f"/api/images/{img_id}" for img_id in image_ids]
+    
+    result = await db.hotels.update_one(
+        {"id": hotel_id},
+        {"$set": {"images": image_urls, "image_ids": image_ids}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    # Update images to associate with hotel
+    for img_id in image_ids:
+        await db.images.update_one(
+            {"id": img_id},
+            {"$set": {"hotel_id": hotel_id}}
+        )
+    
+    return {"message": "Hotel images updated", "images": image_urls}
 
 # Include router and middleware
 app.include_router(api_router)

@@ -16,7 +16,7 @@ import { Badge } from '../components/ui/badge';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, Menu, X, 
   Plus, Edit, Trash2, Download, Eye, Ban, Loader2, Music, Users, Euro, TrendingUp,
-  Bell, Mail, Clock
+  Bell, Mail, Clock, Image, Upload, Check
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -32,6 +32,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { path: '/admin', icon: LayoutDashboard, label: t('adminDashboard') },
     { path: '/admin/bookings', icon: CalendarCheck, label: t('adminBookings') },
     { path: '/admin/hotels', icon: Hotel, label: t('adminHotels') },
+    { path: '/admin/images', icon: Image, label: language === 'de' ? 'Bildmanager' : 'Image Manager' },
     { path: '/admin/payments', icon: CreditCard, label: t('adminPayments') },
     { path: '/admin/reminders', icon: Bell, label: language === 'de' ? 'Erinnerungen' : 'Reminders' },
   ];
@@ -757,6 +758,277 @@ const RemindersManagement = () => {
   );
 };
 
+// Image Manager Component
+const ImageManager = () => {
+  const { language } = useLanguage();
+  const { getAuthHeaders } = useAuth();
+  const [images, setImages] = useState([]);
+  const [hotels, setHotels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [selectedHotel, setSelectedHotel] = useState('all');
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [assignToHotel, setAssignToHotel] = useState('');
+
+  useEffect(() => {
+    fetchImages();
+    fetchHotels();
+  }, [selectedHotel]);
+
+  const fetchImages = async () => {
+    try {
+      const params = selectedHotel !== 'all' ? `?hotel_id=${selectedHotel}` : '';
+      const response = await axios.get(`${API}/admin/images${params}`, { headers: getAuthHeaders() });
+      setImages(response.data);
+    } catch (error) {
+      console.error('Error fetching images:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHotels = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/hotels`, { headers: getAuthHeaders() });
+      setHotels(response.data);
+    } catch (error) {
+      console.error('Error fetching hotels:', error);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    let successCount = 0;
+
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        await axios.post(`${API}/admin/images/upload`, formData, {
+          headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' }
+        });
+        successCount++;
+      } catch (error) {
+        console.error('Upload error:', error);
+        toast.error(`${file.name}: ${language === 'de' ? 'Upload fehlgeschlagen' : 'Upload failed'}`);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`${successCount} ${language === 'de' ? 'Bilder hochgeladen' : 'images uploaded'}`);
+      fetchImages();
+    }
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  const handleDelete = async (imageId) => {
+    if (!window.confirm(language === 'de' ? 'Bild wirklich löschen?' : 'Delete this image?')) return;
+    
+    try {
+      await axios.delete(`${API}/admin/images/${imageId}`, { headers: getAuthHeaders() });
+      toast.success(language === 'de' ? 'Bild gelöscht' : 'Image deleted');
+      fetchImages();
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Löschen' : 'Error deleting');
+    }
+  };
+
+  const toggleImageSelection = (imageId) => {
+    setSelectedImages(prev => 
+      prev.includes(imageId) 
+        ? prev.filter(id => id !== imageId)
+        : [...prev, imageId]
+    );
+  };
+
+  const handleAssignToHotel = async () => {
+    if (!assignToHotel || selectedImages.length === 0) return;
+
+    try {
+      await axios.put(
+        `${API}/admin/hotels/${assignToHotel}/images`,
+        selectedImages,
+        { headers: getAuthHeaders() }
+      );
+      toast.success(language === 'de' ? 'Bilder zugewiesen' : 'Images assigned');
+      setAssignDialogOpen(false);
+      setSelectedImages([]);
+      fetchImages();
+      fetchHotels();
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Zuweisen' : 'Error assigning');
+    }
+  };
+
+  const getImageUrl = (imageId) => {
+    return `${process.env.REACT_APP_BACKEND_URL}/api/images/${imageId}`;
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-[#6B1D2A]" /></div>;
+  }
+
+  return (
+    <div data-testid="admin-images">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <h1 className="font-serif text-3xl text-[#1A1A1A]">
+          {language === 'de' ? 'Bildmanager' : 'Image Manager'}
+        </h1>
+        <div className="flex gap-2">
+          {selectedImages.length > 0 && (
+            <Button 
+              onClick={() => setAssignDialogOpen(true)}
+              variant="outline"
+              data-testid="assign-images-btn"
+            >
+              <Hotel className="w-4 h-4 mr-2" />
+              {language === 'de' ? `${selectedImages.length} Bilder zuweisen` : `Assign ${selectedImages.length} images`}
+            </Button>
+          )}
+          <label>
+            <Button asChild className="bg-[#6B1D2A] hover:bg-[#8A2536] cursor-pointer">
+              <span>
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                {language === 'de' ? 'Bilder hochladen' : 'Upload Images'}
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleUpload}
+              className="hidden"
+              disabled={uploading}
+              data-testid="image-upload-input"
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Filter */}
+      <Card className="border-[#E5E0D5] mb-6">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <Label>{language === 'de' ? 'Filter nach Hotel:' : 'Filter by Hotel:'}</Label>
+            <Select value={selectedHotel} onValueChange={setSelectedHotel}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{language === 'de' ? 'Alle Bilder' : 'All Images'}</SelectItem>
+                {hotels.map(hotel => (
+                  <SelectItem key={hotel.id} value={hotel.id}>{hotel.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Image Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {images.map((image) => (
+          <div 
+            key={image.id} 
+            className={`relative group rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
+              selectedImages.includes(image.id) ? 'border-[#6B1D2A]' : 'border-[#E5E0D5] hover:border-[#D4AF37]'
+            }`}
+            onClick={() => toggleImageSelection(image.id)}
+          >
+            <img
+              src={getImageUrl(image.id)}
+              alt={image.original_filename}
+              className="w-full h-32 object-cover"
+            />
+            
+            {/* Selection indicator */}
+            {selectedImages.includes(image.id) && (
+              <div className="absolute top-2 left-2 w-6 h-6 bg-[#6B1D2A] rounded-full flex items-center justify-center">
+                <Check className="w-4 h-4 text-white" />
+              </div>
+            )}
+            
+            {/* Delete button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(image.id); }}
+              className="absolute top-2 right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+
+            {/* Info overlay */}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <p className="truncate">{image.original_filename}</p>
+              {image.hotel_id && (
+                <p className="text-[#D4AF37] truncate">
+                  {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {images.length === 0 && (
+        <div className="text-center py-12 text-[#4A4A4A]">
+          <Image className="w-16 h-16 mx-auto mb-4 text-[#E5E0D5]" />
+          <p>{language === 'de' ? 'Keine Bilder vorhanden.' : 'No images found.'}</p>
+          <p className="text-sm mt-2">
+            {language === 'de' ? 'Laden Sie Bilder hoch, um sie Hotels zuzuweisen.' : 'Upload images to assign them to hotels.'}
+          </p>
+        </div>
+      )}
+
+      {/* Assign Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {language === 'de' ? 'Bilder einem Hotel zuweisen' : 'Assign Images to Hotel'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>{language === 'de' ? 'Hotel auswählen:' : 'Select Hotel:'}</Label>
+            <Select value={assignToHotel} onValueChange={setAssignToHotel}>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder={language === 'de' ? 'Hotel wählen...' : 'Choose hotel...'} />
+              </SelectTrigger>
+              <SelectContent>
+                {hotels.map(hotel => (
+                  <SelectItem key={hotel.id} value={hotel.id}>{hotel.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-[#4A4A4A] mt-4">
+              {language === 'de' 
+                ? `${selectedImages.length} Bilder werden als Hotelbilder gesetzt (Außenansicht, Zimmer, Restaurant).`
+                : `${selectedImages.length} images will be set as hotel images (Exterior, Room, Restaurant).`}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              {language === 'de' ? 'Abbrechen' : 'Cancel'}
+            </Button>
+            <Button 
+              onClick={handleAssignToHotel} 
+              disabled={!assignToHotel}
+              className="bg-[#6B1D2A] hover:bg-[#8A2536]"
+            >
+              {language === 'de' ? 'Zuweisen' : 'Assign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
 // Main Admin Dashboard
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -797,6 +1069,7 @@ const AdminDashboard = () => {
           <Route index element={<DashboardOverview />} />
           <Route path="bookings" element={<BookingsManagement />} />
           <Route path="hotels" element={<HotelsManagement />} />
+          <Route path="images" element={<ImageManager />} />
           <Route path="payments" element={<PaymentsManagement />} />
           <Route path="reminders" element={<RemindersManagement />} />
         </Routes>
