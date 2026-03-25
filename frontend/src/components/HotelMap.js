@@ -42,15 +42,15 @@ const churchIcon = createIcon('#4A4A4A', '⛪');
 const HotelMap = ({ hotels = [] }) => {
   const { language } = useLanguage();
 
-  // Halle (Saale) center
-  const center = [51.4825, 11.9700];
+  // Halle (Saale) center - balanced to show all POIs
+  const center = [51.4815, 11.9770];
 
-  // Points of interest
+  // Points of interest with verified coordinates
   const landmarks = [
     {
       id: 'haendelhalle',
       name: language === 'de' ? 'Händelhalle (Veranstaltungsort)' : 'Händelhalle (Venue)',
-      position: [51.4833, 11.9680],
+      position: [51.4850, 11.9750], // Salzgrafenplatz 1
       icon: venueIcon,
       description: language === 'de' 
         ? 'Konzerthaus und Veranstaltungsort für Happy Birthday Händel'
@@ -59,7 +59,7 @@ const HotelMap = ({ hotels = [] }) => {
     {
       id: 'bahnhof',
       name: language === 'de' ? 'Hauptbahnhof Halle' : 'Halle Main Station',
-      position: [51.4769, 11.9870],
+      position: [51.4781, 11.9867], // Verified coordinates
       icon: trainIcon,
       description: language === 'de'
         ? 'ICE-Bahnhof mit Verbindungen nach Berlin, Leipzig, Frankfurt'
@@ -68,7 +68,7 @@ const HotelMap = ({ hotels = [] }) => {
     {
       id: 'marktkirche',
       name: language === 'de' ? 'Marktkirche Unser Lieben Frauen' : 'Market Church',
-      position: [51.4829, 11.9694],
+      position: [51.4826, 11.9681], // Verified - Marktplatz
       icon: churchIcon,
       description: language === 'de'
         ? 'Historische Kirche, in der Händel getauft wurde'
@@ -76,12 +76,12 @@ const HotelMap = ({ hotels = [] }) => {
     }
   ];
 
-  // Hotel coordinates (approximate based on addresses)
+  // Hotel coordinates - verified from search results and OpenStreetMap
   const hotelCoordinates = {
-    'niu': [51.4775, 11.9865],
-    'rotes': [51.4815, 11.9710],
-    'ankerhof': [51.4840, 11.9675],
-    'dorint': [51.4890, 11.9630]
+    'niu': [51.4777, 11.9873],      // Riebeckplatz 10 - directly at Hauptbahnhof
+    'rotes': [51.4792, 11.9835],    // Leipziger Straße 76 / Franckestraße 1 - near station
+    'ankerhof': [51.4862, 11.9695], // Ankerstraße 2a - on Saale river near Händelhalle
+    'dorint': [51.4785, 11.9820]    // Dorotheenstraße 12 - between station and center
   };
 
   const getHotelPosition = (hotel) => {
