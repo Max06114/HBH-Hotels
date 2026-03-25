@@ -38,6 +38,7 @@ const hotelIcon = createIcon('#6B1D2A', '🏨');
 const venueIcon = createIcon('#D4AF37', '🎵');
 const trainIcon = createIcon('#1A1A1A', '🚂');
 const churchIcon = createIcon('#4A4A4A', '⛪');
+const monumentIcon = createIcon('#8B4513', '🎭');
 
 const HotelMap = ({ hotels = [] }) => {
   const { language } = useLanguage();
@@ -55,6 +56,15 @@ const HotelMap = ({ hotels = [] }) => {
       description: language === 'de' 
         ? 'Konzerthaus und Veranstaltungsort für Happy Birthday Händel'
         : 'Concert hall and venue for Happy Birthday Händel'
+    },
+    {
+      id: 'haendeldenkmal',
+      name: language === 'de' ? 'Händeldenkmal' : 'Händel Monument',
+      position: [51.4833, 11.9694], // Marktplatz - verified
+      icon: monumentIcon,
+      description: language === 'de'
+        ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz'
+        : 'Bronze statue of George Frideric Handel on the market square'
     },
     {
       id: 'bahnhof',
@@ -164,6 +174,10 @@ const HotelMap = ({ hotels = [] }) => {
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#D4AF37] rounded-full"></span>
             <span>{language === 'de' ? 'Händelhalle' : 'Händelhalle'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-4 h-4 bg-[#8B4513] rounded-full"></span>
+            <span>{language === 'de' ? 'Händeldenkmal' : 'Händel Monument'}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#1A1A1A] rounded-full"></span>
