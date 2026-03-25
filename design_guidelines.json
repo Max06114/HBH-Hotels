@@ -1,0 +1,126 @@
+{
+  "theme": "Light",
+  "design_context": "Marketing & E-commerce (Booking) + Admin Dashboard",
+  "emotional_tone": "Elegant, Trustworthy, Cultural, Classical",
+  "archetype": "JEWEL & LUXURY / ORGANIC & EARTHY Hybrid",
+  "typography": {
+    "headings": {
+      "family": "Playfair Display",
+      "import_url": "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');",
+      "weights": ["400", "600", "700"],
+      "usage": "Hero titles, section headers, hotel names",
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "family": "Manrope",
+      "import_url": "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap');",
+      "weights": ["400", "500", "600"],
+      "usage": "Descriptions, forms, general text",
+      "tracking": "tracking-normal"
+    },
+    "labels": {
+      "family": "Manrope",
+      "weights": ["600"],
+      "usage": "Eyebrows, tags, overlines, statuses",
+      "tracking": "tracking-[0.2em] uppercase"
+    }
+  },
+  "colors": {
+    "primary": "#6B1D2A",
+    "primary_hover": "#8A2536",
+    "secondary": "#D4AF37",
+    "background_base": "#FDFBF7",
+    "background_alt": "#F5F2EA",
+    "surface": "#FFFFFF",
+    "text_main": "#1A1A1A",
+    "text_muted": "#4A4A4A",
+    "border": "#E5E0D5",
+    "admin_sidebar": "#1A1A1A",
+    "admin_sidebar_text": "#FDFBF7",
+    "error": "#D93025",
+    "success": "#2E7D32"
+  },
+  "grids_and_layouts": {
+    "general": "Generous spacing. Use p-8 to p-16 for structural padding. Mobile-first grids. Asymmetric layouts for marketing pages.",
+    "marketing_bento": "Use 12-column bento grids for hotel features. Mix image spans (col-span-8) with content spans (col-span-4).",
+    "admin_dashboard": "High density grid (grid-cols-4 or grid-cols-12). gap-4 or gap-6. Every pixel utilized. Cardless or max 8px radius with 1px border. Full height children."
+  },
+  "surfaces_and_visual_enhancers": {
+    "header": "Crystal Glassmorphism: bg-[#FDFBF7]/80 backdrop-blur-xl border-b border-[#E5E0D5]/50. NEVER fully transparent.",
+    "footer": "Dark mode contrast: bg-[#1A1A1A] text-[#FDFBF7] with massive spacing py-24. High typographic contrast.",
+    "hotel_cards": "Tactile Neumorphism: Flat bg #FFFFFF, 1px border #E5E0D5, subtle ambient shadow. On hover: -translate-y-1, shadow-lg, border-[#6B1D2A]/30. Nested radii (child image radius <= parent card radius).",
+    "admin_panels": "Grid borders / Technical look: border-collapse style layouts with border-r and border-b in subtle #E5E0D5."
+  },
+  "motion": {
+    "hover_states": "Subtle lifts (-translate-y-1) and shadow expansions for clickable cards. Color transitions (200ms ease) for buttons.",
+    "page_transitions": "Fade in and slide up (using framer-motion). Staggered entrance animations for hotel lists.",
+    "micro_interactions": "Button active scale (0.98), subtle background color shifts."
+  },
+  "accessibility": {
+    "contrast": "Ensure APCA/WCAG AA compliance. Text on images MUST have text-shadow or a dark gradient overlay.",
+    "motion": "Respect prefers-reduced-motion. Use aria-hidden on purely decorative elements.",
+    "focus": "focus:ring-2 focus:ring-[#6B1D2A] focus:ring-offset-2 focus:ring-offset-[#FDFBF7]",
+    "testing": "All interactive and key informational elements MUST include a 'data-testid' attribute (e.g., data-testid='book-hotel-button')."
+  },
+  "components": {
+    "buttons": "Pill-shaped (rounded-full) for marketing, slightly rounded (rounded-md) for admin. Primary is bg-[#6B1D2A] text-white. Secondary is outline border-[#E5E0D5] text-[#1A1A1A].",
+    "forms": "Use Shadcn/UI (Form, Input, Select, DatePicker) customized with bg-[#FFFFFF], focus:border-[#6B1D2A]. Left align all labels.",
+    "tables": "Shadcn Table for Admin booking lists. Subtle row hover effects bg-[#1A1A1A]/5.",
+    "modals": "Shadcn Dialog with backdrop-blur-md overlay. No fully transparent overlays.",
+    "toasts": "Use Sonner for payment success/failure and form submissions."
+  },
+  "media": {
+    "images": [
+      {
+        "url": "https://images.unsplash.com/photo-1763627516727-2ca3e324fa59?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwzfHxjaG9pciUyMHNpbmdpbmclMjBjbGFzc2ljYWwlMjBtdXNpYyUyMGNvbmNlcnR8ZW58MHx8fHwxNzc0NDQwNjg1fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Hero Background / Event Context",
+        "description": "Orchestra and choir performing. Use as main hero visual with a dark or burgundy gradient overlay."
+      },
+      {
+        "url": "https://images.pexels.com/photos/5682849/pexels-photo-5682849.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Destination (Halle)",
+        "description": "Historic German cityscape. Use in 'About the Festival' or 'Destination' section."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1741506131058-533fcf894483?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwyfHxsdXh1cnklMjBob3RlbCUyMHJvb20lMjBiZWQlMjA0JTIwc3RhcnxlbnwwfHx8fDE3NzQ0NDA2ODd8MA&ixlib=rb-4.1.0&q=85",
+        "category": "Hotel Image Placeholder 1",
+        "description": "Luxurious 4-star hotel room. Use as cover image for hotel listings."
+      },
+      {
+        "url": "https://images.pexels.com/photos/6193771/pexels-photo-6193771.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Choir Group / Community",
+        "description": "Diverse choir members singing. Perfect for community or 'Who is this for?' section."
+      }
+    ]
+  },
+  "3d_and_creative_libraries": {
+    "library": "framer-motion",
+    "usage": "Use Framer Motion for 2.5D Parallax effects on scroll for the hero section and staggered entrance animations for the hotel lists. No heavy WebGL/Three.js needed for this classical/elegant context."
+  },
+  "icons_and_assets": {
+    "library": "lucide-react",
+    "style": "Clean, thin stroke (stroke-width: 1.5). DO NOT use emojis for icons."
+  },
+  "instructions_to_main_agent": [
+    "Generate React (.jsx/.js) code, NOT .tsx. Strip typescript types from Shadcn configurations if copying manually.",
+    "DO NOT output raw HTML for complex components (Datepickers, Dropdowns); ALWAYS use Shadcn.",
+    "NEVER use generic placeholder text; implement actual structured mock data (hotel names, prices, dates) matching the context of Halle, Germany.",
+    "For the bilingual feature, set up a React context for i18n, default to German but provide English translation objects.",
+    "Integrate a robust invoice UI mimicking the PDF generation structure in the admin dashboard.",
+    "Implement 'framer-motion' for entrance animations (staggered lists of hotels) to bring the design to life.",
+    "Ensure total mobile responsiveness (images max-h-[80vh] on mobile).",
+    "Adhere to 'Old Money Tech' archetype: use Playfair Display for big headings, Manrope for readable dense text."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Avoid 'AI slop'.",
+    "Don't make generic centered layouts. Use grid and bento boxes.",
+    "Create depth via layered design and glassmorphism.",
+    "MUST NOT apply `transition: all` universally.",
+    "MUST NOT center align the app container in App.css.",
+    "Avoid AI emojis. Use lucide-react icons.",
+    "Use 2-3x more spacing than typical defaults.",
+    "Use sonner for toast notifications.",
+    "All interactive and key informational elements MUST include a 'data-testid' attribute (e.g., data-testid='login-submit').",
+    "DO NOT use complete transparent background in header, overlays, or any surface with content underneath."
+  ]
+}
