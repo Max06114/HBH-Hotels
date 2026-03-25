@@ -788,6 +788,141 @@ async def admin_get_stats(admin: dict = Depends(get_current_admin)):
         "total_revenue": total_revenue
     }
 
+# ============== PAYMENT REMINDERS ==============
+
+async def send_payment_reminder(booking: dict):
+    """Send payment reminder email for remaining balance"""
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        return False
+    
+    lang = booking.get("language", "de")
+    if lang == "de":
+        subject = f"Zahlungserinnerung - Buchung {booking['booking_number']}"
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #6B1D2A;">Zahlungserinnerung</h2>
+            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+            <p>Ihre Anreise für Happy Birthday Händel 2026 steht in <strong>6 Wochen</strong> bevor.</p>
+            <p>Bitte überweisen Sie den Restbetrag für Ihre Buchung:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Buchungsnummer:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['hotel_name']}</td>
+                </tr>
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Anreise:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Abreise:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
+                </tr>
+                <tr style="background: #6B1D2A; color: white;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Restbetrag fällig:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>{booking['remaining_amount']:.2f} €</strong></td>
+                </tr>
+            </table>
+            <p>Bitte kontaktieren Sie uns unter info@travel-events.de für die Zahlungsabwicklung.</p>
+            <p>Mit freundlichen Grüßen,<br><strong>Travel Events</strong></p>
+        </div>
+        </body></html>
+        """
+    else:
+        subject = f"Payment Reminder - Booking {booking['booking_number']}"
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #6B1D2A;">Payment Reminder</h2>
+            <p>Dear {booking['salutation']} {booking['last_name']},</p>
+            <p>Your arrival for Happy Birthday Händel 2026 is in <strong>6 weeks</strong>.</p>
+            <p>Please transfer the remaining balance for your booking:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Booking Number:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['hotel_name']}</td>
+                </tr>
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Check-in:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Check-out:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
+                </tr>
+                <tr style="background: #6B1D2A; color: white;">
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>Remaining Balance:</strong></td>
+                    <td style="padding: 10px; border: 1px solid #E5E0D5;"><strong>{booking['remaining_amount']:.2f} €</strong></td>
+                </tr>
+            </table>
+            <p>Please contact us at info@travel-events.de for payment processing.</p>
+            <p>Best regards,<br><strong>Travel Events</strong></p>
+        </div>
+        </body></html>
+        """
+    
+    return await send_email(booking['email'], subject, body)
+
+@api_router.post("/admin/send-reminders")
+async def admin_send_payment_reminders(admin: dict = Depends(get_current_admin)):
+    """Send payment reminders for bookings with check-in in 6 weeks"""
+    # Calculate date 6 weeks from now
+    six_weeks_from_now = (datetime.now(timezone.utc) + timedelta(weeks=6)).strftime("%Y-%m-%d")
+    six_weeks_plus_one = (datetime.now(timezone.utc) + timedelta(weeks=6, days=1)).strftime("%Y-%m-%d")
+    
+    # Find bookings that:
+    # 1. Have deposit_paid status (not fully paid yet)
+    # 2. Check-in is around 6 weeks from now
+    # 3. Haven't received a reminder yet
+    bookings = await db.bookings.find({
+        "payment_status": "deposit_paid",
+        "check_in": {"$gte": six_weeks_from_now, "$lt": six_weeks_plus_one},
+        "reminder_sent": {"$ne": True}
+    }, {"_id": 0}).to_list(100)
+    
+    sent_count = 0
+    for booking in bookings:
+        success = await send_payment_reminder(booking)
+        if success:
+            await db.bookings.update_one(
+                {"id": booking["id"]},
+                {"$set": {"reminder_sent": True, "reminder_sent_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            sent_count += 1
+    
+    return {"message": f"Sent {sent_count} payment reminders", "total_eligible": len(bookings)}
+
+@api_router.get("/admin/pending-reminders")
+async def admin_get_pending_reminders(admin: dict = Depends(get_current_admin)):
+    """Get list of bookings that need payment reminders"""
+    # Get all bookings with deposit_paid that haven't been reminded
+    bookings = await db.bookings.find({
+        "payment_status": "deposit_paid",
+        "reminder_sent": {"$ne": True}
+    }, {"_id": 0}).to_list(100)
+    
+    # Calculate which ones are within 6 weeks of check-in
+    six_weeks_from_now = datetime.now(timezone.utc) + timedelta(weeks=6)
+    pending = []
+    
+    for booking in bookings:
+        check_in_date = datetime.strptime(booking["check_in"], "%Y-%m-%d")
+        days_until = (check_in_date - datetime.now(timezone.utc).replace(tzinfo=None)).days
+        if days_until <= 42:  # 6 weeks = 42 days
+            booking["days_until_checkin"] = days_until
+            pending.append(booking)
+    
+    return {"pending_reminders": pending, "count": len(pending)}
+
 # ============== SEED DATA ==============
 
 @api_router.post("/seed-hotels")
@@ -804,12 +939,12 @@ async def seed_hotels():
             "description": "Das 4* Hotel the niu Ridge ist 2020 eröffnet worden. Es ist 500 m zum Bahnhof und 25 Minuten zu Fuß von der Händelhalle entfernt. Es verfügt nur über Doppelbettzimmer für Einzel- oder Doppelbelegung.",
             "description_en": "The 4* Hotel the niu Ridge opened in 2020. It is 500 m to the train station and 25 minutes walk from the Händelhalle. It only has double rooms for single or double occupancy.",
             "stars": 4,
-            "address": "Halle (Saale), Germany",
+            "address": "Riebeckplatz 10, 06108 Halle (Saale)",
             "distance_to_venue": "25 Minuten zu Fuß zur Händelhalle",
             "distance_to_venue_en": "25 minutes walk to Händelhalle",
-            "amenities": ["Frühstück inklusive", "Bettensteuer inklusive", "500m zum Bahnhof"],
-            "amenities_en": ["Breakfast included", "City tax included", "500m to train station"],
-            "images": ["https://images.unsplash.com/photo-1741506131058-533fcf894483?crop=entropy&cs=srgb&fm=jpg&w=800"],
+            "amenities": ["Frühstück inklusive", "Bettensteuer inklusive", "500m zum Bahnhof", "Private Sauna", "Co-Working"],
+            "amenities_en": ["Breakfast included", "City tax included", "500m to train station", "Private sauna", "Co-working"],
+            "images": ["https://digital.ihg.com/is/image/ihg/holiday-inn-the-niu-ridge-halle-8740287569-4x3"],
             "single_price": 109.00,
             "double_price": 131.00,
             "twin_price": None,
@@ -825,12 +960,12 @@ async def seed_hotels():
             "description": "Das 4* Rotes Ross liegt ca. 15 Minuten Fußweg von der Händelhalle entfernt und 7 Minuten zum Bahnhof. Das Hotel liegt ruhig in der Fußgängerzone und verfügt über eine finnische Sauna und ein Restaurant.",
             "description_en": "The 4* Rotes Ross is about 15 minutes walk from the Händelhalle and 7 minutes to the train station. The hotel is quietly located in the pedestrian zone and has a Finnish sauna and restaurant.",
             "stars": 4,
-            "address": "Fußgängerzone, Halle (Saale), Germany",
+            "address": "Leipziger Straße 76, 06108 Halle (Saale)",
             "distance_to_venue": "15 Minuten zu Fuß zur Händelhalle",
             "distance_to_venue_en": "15 minutes walk to Händelhalle",
             "amenities": ["Frühstück inklusive", "Bettensteuer inklusive", "Finnische Sauna", "Restaurant", "In der Fußgängerzone"],
             "amenities_en": ["Breakfast included", "City tax included", "Finnish sauna", "Restaurant", "In pedestrian zone"],
-            "images": ["https://images.unsplash.com/photo-1566073771259-6a8506099945?crop=entropy&cs=srgb&fm=jpg&w=800"],
+            "images": ["https://www.dormero.de/fileadmin/_processed_/6/6/csm_DORMERO-Hotel-Halle-Aussenansicht_01_4f8cc4f6a1.jpg"],
             "single_price": 113.00,
             "double_price": 133.00,
             "twin_price": 133.00,
@@ -846,12 +981,12 @@ async def seed_hotels():
             "description": "Das 4* Ankerhof Hotel befindet sich in einem ehemaligen Speicher und bietet einen Ausblick auf einen Seitenarm der Saale. Es bietet Sauna und Wellness und ist 250 Meter von der Händelhalle entfernt.",
             "description_en": "The 4* Ankerhof Hotel is located in a former warehouse and offers views of a branch of the Saale river. It offers sauna and wellness and is 250 meters from the Händelhalle.",
             "stars": 4,
-            "address": "An der Saale, Halle (Saale), Germany",
+            "address": "Ankerstraße 2a, 06108 Halle (Saale)",
             "distance_to_venue": "250 Meter zur Händelhalle",
             "distance_to_venue_en": "250 meters to Händelhalle",
             "amenities": ["Frühstück inklusive", "Bettensteuer inklusive", "Sauna & Wellness", "Blick auf die Saale", "Historisches Gebäude"],
             "amenities_en": ["Breakfast included", "City tax included", "Sauna & Wellness", "River view", "Historic building"],
-            "images": ["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?crop=entropy&cs=srgb&fm=jpg&w=800"],
+            "images": ["https://ankerhof.de/wp-content/uploads/2019/03/ankerhof-hotel-aussen.jpg"],
             "single_price": 128.00,
             "double_price": 175.00,
             "twin_price": 175.00,
@@ -867,12 +1002,12 @@ async def seed_hotels():
             "description": "Das 4* Dorint Hotel Charlottenhof liegt ca. 20 Minuten Fußweg von der Händelhalle entfernt und ist seit Jahren eine beliebte Bleibe für Happy Birthday Händel Sänger, mit einem guten Restaurant und einer Sauna.",
             "description_en": "The 4* Dorint Hotel Charlottenhof is about 20 minutes walk from the Händelhalle and has been a popular place to stay for Happy Birthday Händel singers for years, with a good restaurant and sauna.",
             "stars": 4,
-            "address": "Charlottenhof, Halle (Saale), Germany",
+            "address": "Dorotheenstraße 12, 06108 Halle (Saale)",
             "distance_to_venue": "20 Minuten zu Fuß zur Händelhalle",
             "distance_to_venue_en": "20 minutes walk to Händelhalle",
             "amenities": ["Frühstück inklusive", "Bettensteuer inklusive", "Restaurant", "Sauna", "Beliebte HBH-Unterkunft"],
             "amenities_en": ["Breakfast included", "City tax included", "Restaurant", "Sauna", "Popular HBH accommodation"],
-            "images": ["https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?crop=entropy&cs=srgb&fm=jpg&w=800"],
+            "images": ["https://hotel-halle-saale.dorint.com/fileadmin/_processed_/d/3/csm_Dorint_Charlottenhof_Halle_Exterior_05c0ab6ce5.jpg"],
             "single_price": 155.00,
             "double_price": 196.00,
             "twin_price": 196.00,

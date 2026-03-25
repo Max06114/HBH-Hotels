@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../components/ui/badge';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, Menu, X, 
-  Plus, Edit, Trash2, Download, Eye, Ban, Loader2, Music, Users, Euro, TrendingUp
+  Plus, Edit, Trash2, Download, Eye, Ban, Loader2, Music, Users, Euro, TrendingUp,
+  Bell, Mail, Clock
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -32,6 +33,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { path: '/admin/bookings', icon: CalendarCheck, label: t('adminBookings') },
     { path: '/admin/hotels', icon: Hotel, label: t('adminHotels') },
     { path: '/admin/payments', icon: CreditCard, label: t('adminPayments') },
+    { path: '/admin/reminders', icon: Bell, label: language === 'de' ? 'Erinnerungen' : 'Reminders' },
   ];
 
   const handleLogout = () => {
@@ -618,6 +620,143 @@ const PaymentsManagement = () => {
   );
 };
 
+// Reminders Management
+const RemindersManagement = () => {
+  const { language } = useLanguage();
+  const { getAuthHeaders } = useAuth();
+  const [pendingReminders, setPendingReminders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    fetchPendingReminders();
+  }, []);
+
+  const fetchPendingReminders = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/pending-reminders`, { headers: getAuthHeaders() });
+      setPendingReminders(response.data.pending_reminders || []);
+    } catch (error) {
+      console.error('Error fetching pending reminders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendReminders = async () => {
+    setSending(true);
+    try {
+      const response = await axios.post(`${API}/admin/send-reminders`, {}, { headers: getAuthHeaders() });
+      toast.success(language === 'de' 
+        ? `${response.data.sent_count} Erinnerungen gesendet` 
+        : `${response.data.sent_count} reminders sent`);
+      fetchPendingReminders();
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Senden' : 'Error sending reminders');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-[#6B1D2A]" /></div>;
+  }
+
+  return (
+    <div data-testid="admin-reminders">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="font-serif text-3xl text-[#1A1A1A]">
+          {language === 'de' ? 'Zahlungserinnerungen' : 'Payment Reminders'}
+        </h1>
+        <Button 
+          onClick={handleSendReminders} 
+          disabled={sending || pendingReminders.length === 0}
+          className="bg-[#6B1D2A] hover:bg-[#8A2536]"
+          data-testid="send-reminders-btn"
+        >
+          {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
+          {language === 'de' ? 'Alle Erinnerungen senden' : 'Send All Reminders'}
+        </Button>
+      </div>
+
+      <Card className="border-[#E5E0D5] mb-6">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <Clock className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-[#4A4A4A]">
+                {language === 'de' ? 'Ausstehende Erinnerungen' : 'Pending Reminders'}
+              </p>
+              <p className="text-2xl font-bold text-[#1A1A1A]">{pendingReminders.length}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-[#E5E0D5]">
+        <CardHeader>
+          <CardTitle className="text-lg">
+            {language === 'de' ? 'Buchungen mit ausstehender Restzahlung' : 'Bookings with pending balance'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{language === 'de' ? 'Buchungsnummer' : 'Booking Number'}</TableHead>
+                  <TableHead>{language === 'de' ? 'Gast' : 'Guest'}</TableHead>
+                  <TableHead>Hotel</TableHead>
+                  <TableHead>{language === 'de' ? 'Anreise' : 'Check-in'}</TableHead>
+                  <TableHead>{language === 'de' ? 'Tage bis Anreise' : 'Days until'}</TableHead>
+                  <TableHead>{language === 'de' ? 'Restbetrag' : 'Remaining'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingReminders.map((booking) => (
+                  <TableRow key={booking.id} className="hover:bg-[#F5F2EA]">
+                    <TableCell className="font-mono text-sm">{booking.booking_number}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{booking.first_name} {booking.last_name}</p>
+                        <p className="text-sm text-[#4A4A4A]">{booking.email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.hotel_name}</TableCell>
+                    <TableCell>{booking.check_in}</TableCell>
+                    <TableCell>
+                      <Badge className={booking.days_until_checkin <= 42 ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'}>
+                        {booking.days_until_checkin} {language === 'de' ? 'Tage' : 'days'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-semibold text-[#6B1D2A]">{booking.remaining_amount?.toFixed(2)} €</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {pendingReminders.length === 0 && (
+            <div className="text-center py-12 text-[#4A4A4A]">
+              {language === 'de' ? 'Keine ausstehenden Erinnerungen.' : 'No pending reminders.'}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="mt-6 p-4 bg-[#F5F2EA] rounded-lg">
+        <p className="text-sm text-[#4A4A4A]">
+          <strong>{language === 'de' ? 'Info:' : 'Info:'}</strong>{' '}
+          {language === 'de' 
+            ? 'Zahlungserinnerungen werden automatisch an Gäste gesendet, deren Anreise in 6 Wochen oder weniger ist und die noch den Restbetrag (75%) zahlen müssen.'
+            : 'Payment reminders are automatically sent to guests whose check-in is in 6 weeks or less and who still need to pay the remaining balance (75%).'}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // Main Admin Dashboard
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -659,6 +798,7 @@ const AdminDashboard = () => {
           <Route path="bookings" element={<BookingsManagement />} />
           <Route path="hotels" element={<HotelsManagement />} />
           <Route path="payments" element={<PaymentsManagement />} />
+          <Route path="reminders" element={<RemindersManagement />} />
         </Routes>
       </main>
     </div>
