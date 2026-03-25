@@ -78,16 +78,15 @@ const HotelMap = ({ hotels = [] }) => {
 
   // Hotel coordinates - verified from search results and OpenStreetMap
   const hotelCoordinates = {
-    'niu': [51.4777, 11.9873],      // Riebeckplatz 10 - directly at Hauptbahnhof
-    'rotes': [51.4792, 11.9835],    // Leipziger Straße 76 / Franckestraße 1 - near station
-    'ankerhof': [51.4862, 11.9695], // Ankerstraße 2a - on Saale river near Händelhalle
-    'dorint': [51.4785, 11.9820]    // Dorotheenstraße 12 - between station and center
+    'b&b': [51.4817, 11.9656],      // Hallorenring 9 - near Marktkirche in center
+    'bb': [51.4817, 11.9656],       // Alternative match
+    'ankerhof': [51.4824, 11.9621], // Ankerstraße 2a - on Saale river (51°28'56"N, 11°57'43"E)
+    'dorint': [51.4772, 11.9825]    // Dorotheenstraße 12 - near Riebeckplatz/Hauptbahnhof
   };
 
   const getHotelPosition = (hotel) => {
     const name = hotel.name.toLowerCase();
-    if (name.includes('niu')) return hotelCoordinates.niu;
-    if (name.includes('rotes') || name.includes('ross')) return hotelCoordinates.rotes;
+    if (name.includes('b&b') || name.includes('b & b') || name.includes('bb hotel')) return hotelCoordinates['b&b'];
     if (name.includes('ankerhof')) return hotelCoordinates.ankerhof;
     if (name.includes('dorint') || name.includes('charlottenhof')) return hotelCoordinates.dorint;
     return center;
