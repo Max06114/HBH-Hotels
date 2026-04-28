@@ -20,6 +20,11 @@ import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// German price format helper (comma as decimal separator)
+const formatPrice = (price) => {
+  return price.toFixed(2).replace('.', ',');
+};
+
 const BookingPage = () => {
   const { hotelId } = useParams();
   const navigate = useNavigate();
@@ -206,10 +211,10 @@ const BookingPage = () => {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="single">{t('singleRoom')} - {hotel.single_price.toFixed(2)} €</SelectItem>
-                            <SelectItem value="double">{t('doubleRoom')} - {hotel.double_price.toFixed(2)} €</SelectItem>
+                            <SelectItem value="single">{t('singleRoom')} - {formatPrice(hotel.single_price)} €</SelectItem>
+                            <SelectItem value="double">{t('doubleRoom')} - {formatPrice(hotel.double_price)} €</SelectItem>
                             {hotel.twin_price && (
-                              <SelectItem value="twin">{t('twinRoom')} - {hotel.twin_price.toFixed(2)} €</SelectItem>
+                              <SelectItem value="twin">{t('twinRoom')} - {formatPrice(hotel.twin_price)} €</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -381,7 +386,7 @@ const BookingPage = () => {
                       ) : (
                         <CreditCard className="w-5 h-5 mr-2" />
                       )}
-                      {t('payWithStripe')} {priceInfo && `(${priceInfo.deposit.toFixed(2)} € ${t('deposit')})`}
+                      {t('payWithStripe')} {priceInfo && `(${formatPrice(priceInfo.deposit)} € ${t('deposit')})`}
                     </Button>
 
                     <p className="text-xs text-[#4A4A4A] text-center">
@@ -417,20 +422,20 @@ const BookingPage = () => {
                   {priceInfo && (
                     <div className="border-t border-[#E5E0D5] pt-4 mt-4 space-y-3">
                       <div className="flex justify-between text-sm">
-                        <span className="text-[#4A4A4A]">{priceInfo.nights} {t('nights')} × {priceInfo.pricePerNight.toFixed(2)} €</span>
-                        <span>{priceInfo.total.toFixed(2)} €</span>
+                        <span className="text-[#4A4A4A]">{priceInfo.nights} {t('nights')} × {formatPrice(priceInfo.pricePerNight)} €</span>
+                        <span>{formatPrice(priceInfo.total)} €</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-[#4A4A4A]">{t('deposit')}</span>
-                        <span className="font-semibold text-[#6B1D2A]">{priceInfo.deposit.toFixed(2)} €</span>
+                        <span className="font-semibold text-[#6B1D2A]">{formatPrice(priceInfo.deposit)} €</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-[#4A4A4A]">{t('remaining')}</span>
-                        <span>{priceInfo.remaining.toFixed(2)} €</span>
+                        <span>{formatPrice(priceInfo.remaining)} €</span>
                       </div>
                       <div className="border-t border-[#E5E0D5] pt-3 flex justify-between font-semibold">
                         <span>{t('total')}</span>
-                        <span className="text-[#6B1D2A]">{priceInfo.total.toFixed(2)} €</span>
+                        <span className="text-[#6B1D2A]">{formatPrice(priceInfo.total)} €</span>
                       </div>
                     </div>
                   )}

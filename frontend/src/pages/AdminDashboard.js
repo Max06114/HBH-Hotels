@@ -24,6 +24,12 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// German price format helper (comma as decimal separator)
+const formatPrice = (price) => {
+  if (price === null || price === undefined) return '0,00';
+  return price.toFixed(2).replace('.', ',');
+};
+
 // Sidebar Component
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const { t, language } = useLanguage();
@@ -144,7 +150,7 @@ const DashboardOverview = () => {
     { label: language === 'de' ? 'Gesamtbuchungen' : 'Total Bookings', value: stats?.total_bookings || 0, icon: CalendarCheck, color: 'bg-blue-500' },
     { label: language === 'de' ? 'Ausstehend' : 'Pending', value: stats?.pending_bookings || 0, icon: Users, color: 'bg-yellow-500' },
     { label: language === 'de' ? 'Bezahlt' : 'Paid', value: stats?.paid_bookings || 0, icon: TrendingUp, color: 'bg-green-500' },
-    { label: language === 'de' ? 'Umsatz' : 'Revenue', value: `${(stats?.total_revenue || 0).toFixed(2)} €`, icon: Euro, color: 'bg-[#6B1D2A]' },
+    { label: language === 'de' ? 'Umsatz' : 'Revenue', value: `${formatPrice(stats?.total_revenue || 0)} €`, icon: Euro, color: 'bg-[#6B1D2A]' },
   ];
 
   return (
@@ -318,7 +324,7 @@ const BookingsManagement = () => {
                     <TableCell>{booking.hotel_name}</TableCell>
                     <TableCell>{booking.check_in}</TableCell>
                     <TableCell>{booking.check_out}</TableCell>
-                    <TableCell className="font-semibold">{booking.total_price?.toFixed(2)} €</TableCell>
+                    <TableCell className="font-semibold">{formatPrice(booking.total_price)} €</TableCell>
                     <TableCell>{getStatusBadge(booking.payment_status)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -646,7 +652,7 @@ const PaymentsManagement = () => {
                   <TableRow key={payment.id} className="hover:bg-[#F5F2EA]">
                     <TableCell className="font-mono text-xs">{payment.session_id?.slice(0, 20)}...</TableCell>
                     <TableCell className="capitalize">{payment.payment_method}</TableCell>
-                    <TableCell className="font-semibold">{payment.amount?.toFixed(2)} {payment.currency}</TableCell>
+                    <TableCell className="font-semibold">{formatPrice(payment.amount)} {payment.currency}</TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>
                     <TableCell>{new Date(payment.created_at).toLocaleDateString('de-DE')}</TableCell>
                   </TableRow>
@@ -776,7 +782,7 @@ const RemindersManagement = () => {
                         {booking.days_until_checkin} {language === 'de' ? 'Tage' : 'days'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-semibold text-[#6B1D2A]">{booking.remaining_amount?.toFixed(2)} €</TableCell>
+                    <TableCell className="font-semibold text-[#6B1D2A]">{formatPrice(booking.remaining_amount)} €</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

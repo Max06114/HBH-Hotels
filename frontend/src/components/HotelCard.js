@@ -5,6 +5,11 @@ import { Star, MapPin, Coffee, Check, ChevronLeft, ChevronRight } from 'lucide-r
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 
+// German price format helper (comma as decimal separator)
+const formatPrice = (price) => {
+  return price.toFixed(2).replace('.', ',');
+};
+
 const HotelCard = ({ hotel, index }) => {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
@@ -133,17 +138,17 @@ const HotelCard = ({ hotel, index }) => {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-[#4A4A4A]">{t('singleRoom')}</span>
-              <p className="font-semibold text-[#6B1D2A]">{hotel.single_price.toFixed(2)} € <span className="font-normal text-xs text-[#4A4A4A]">{t('perNight')}</span></p>
+              <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.single_price)} € <span className="font-normal text-xs text-[#4A4A4A]">{t('perNight')}</span></p>
             </div>
             <div>
               <span className="text-[#4A4A4A]">{t('doubleRoom')}</span>
-              <p className="font-semibold text-[#6B1D2A]">{hotel.double_price.toFixed(2)} € <span className="font-normal text-xs text-[#4A4A4A]">{t('perNight')}</span></p>
+              <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.double_price)} € <span className="font-normal text-xs text-[#4A4A4A]">{t('perNight')}</span></p>
             </div>
           </div>
           {hotel.twin_price && (
             <div className="mt-2 text-sm">
               <span className="text-[#4A4A4A]">{t('twinRoom')}: </span>
-              <span className="font-semibold text-[#6B1D2A]">{hotel.twin_price.toFixed(2)} €</span>
+              <span className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.twin_price)} €</span>
             </div>
           )}
         </div>

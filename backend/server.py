@@ -840,6 +840,10 @@ async def export_bookings_csv(admin: dict = Depends(get_current_admin)):
     }
     
     for booking in bookings:
+        # Format prices with comma (German format) without currency
+        price_per_night = f"{booking.get('price_per_night', 0):.2f}".replace('.', ',')
+        total_price = f"{booking.get('total_price', 0):.2f}".replace('.', ',')
+        
         writer.writerow([
             booking.get('booking_number', ''),
             booking.get('hotel_name', ''),
@@ -849,8 +853,8 @@ async def export_bookings_csv(admin: dict = Depends(get_current_admin)):
             booking.get('check_out', ''),
             booking.get('nights', ''),
             room_type_labels.get(booking.get('room_type', ''), booking.get('room_type', '')),
-            f"{booking.get('price_per_night', 0):.2f} €",
-            f"{booking.get('total_price', 0):.2f} €",
+            price_per_night,
+            total_price,
             status_labels.get(booking.get('payment_status', ''), booking.get('payment_status', '')),
             booking.get('notes', '')
         ])

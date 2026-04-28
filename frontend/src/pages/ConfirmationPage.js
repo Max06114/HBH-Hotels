@@ -10,6 +10,12 @@ import { CheckCircle, Download, Loader2, XCircle, Home, Mail } from 'lucide-reac
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// German price format helper (comma as decimal separator)
+const formatPrice = (price) => {
+  if (price === null || price === undefined) return '0,00';
+  return price.toFixed(2).replace('.', ',');
+};
+
 const ConfirmationPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -137,7 +143,7 @@ const ConfirmationPage = () => {
                         </div>
                         <div>
                           <span className="text-[#4A4A4A]">{t('deposit')}</span>
-                          <p className="font-medium text-[#2E7D32]">{booking.deposit_amount?.toFixed(2)} € {language === 'de' ? 'bezahlt' : 'paid'}</p>
+                          <p className="font-medium text-[#2E7D32]">{formatPrice(booking.deposit_amount)} € {language === 'de' ? 'bezahlt' : 'paid'}</p>
                         </div>
                       </div>
                     </div>
