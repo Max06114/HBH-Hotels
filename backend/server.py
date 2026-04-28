@@ -645,6 +645,234 @@ async def stripe_webhook(request: Request):
     logger.info("Stripe webhook received")
     return {"status": "received"}
 
+# ============== PAYPAL PAYMENTS ==============
+
+class PayPalOrderRequest(BaseModel):
+    hotel_id: str
+    salutation: str
+    first_name: str
+    last_name: str
+    email: str
+    street: str
+    postal_code: str
+    city: str
+    country: str
+    room_type: str
+    check_in: str
+    check_out: str
+    notes: str = ""
+    payment_method: str = "paypal"
+
+class PayPalCaptureRequest(BaseModel):
+    order_id: str
+
+@api_router.post("/payments/paypal/create-order")
+async def create_paypal_order(order_data: PayPalOrderRequest):
+    """Create a PayPal order for the booking deposit."""
+    import httpx
+    
+    # Get hotel for pricing
+    hotel = await db.hotels.find_one({"id": order_data.hotel_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    # Calculate price
+    check_in = datetime.strptime(order_data.check_in, '%Y-%m-%d')
+    check_out = datetime.strptime(order_data.check_out, '%Y-%m-%d')
+    nights = (check_out - check_in).days
+    
+    # Get price based on room type
+    room_prices = {
+        'single': hotel.get('single_price', 0),
+        'double': hotel.get('double_price', 0),
+        'twin': hotel.get('twin_price', hotel.get('double_price', 0)),
+        'single_comfort': hotel.get('single_comfort_price', hotel.get('single_price', 0)),
+        'double_comfort': hotel.get('double_comfort_price', hotel.get('double_price', 0)),
+        'twin_comfort': hotel.get('twin_comfort_price', hotel.get('twin_price', hotel.get('double_price', 0)))
+    }
+    price_per_night = room_prices.get(order_data.room_type, hotel['single_price'])
+    total_price = price_per_night * nights
+    deposit_amount = round(total_price * 0.25, 2)
+    
+    # Create booking first
+    booking_number = f"HBH-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    invoice_number = f"INV-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    
+    booking = {
+        "id": str(uuid.uuid4()),
+        "booking_number": booking_number,
+        "invoice_number": invoice_number,
+        "hotel_id": order_data.hotel_id,
+        "hotel_name": hotel['name'],
+        "salutation": order_data.salutation,
+        "first_name": order_data.first_name,
+        "last_name": order_data.last_name,
+        "email": order_data.email,
+        "street": order_data.street,
+        "postal_code": order_data.postal_code,
+        "city": order_data.city,
+        "country": order_data.country,
+        "room_type": order_data.room_type,
+        "check_in": order_data.check_in,
+        "check_out": order_data.check_out,
+        "nights": nights,
+        "price_per_night": price_per_night,
+        "total_price": total_price,
+        "deposit_amount": deposit_amount,
+        "remaining_amount": round(total_price - deposit_amount, 2),
+        "notes": order_data.notes,
+        "payment_status": "pending",
+        "payment_method": "paypal",
+        "language": "de",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.bookings.insert_one(booking)
+    
+    # Get PayPal access token
+    client_id = os.environ.get('PAYPAL_CLIENT_ID')
+    client_secret = os.environ.get('PAYPAL_SECRET')
+    
+    async with httpx.AsyncClient() as client:
+        # Get access token
+        auth_response = await client.post(
+            "https://api-m.paypal.com/v1/oauth2/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"}
+        )
+        access_token = auth_response.json()["access_token"]
+        
+        # Create PayPal order
+        order_response = await client.post(
+            "https://api-m.paypal.com/v2/checkout/orders",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {access_token}"
+            },
+            json={
+                "intent": "CAPTURE",
+                "purchase_units": [{
+                    "reference_id": booking["id"],
+                    "description": f"Anzahlung: {hotel['name']} - {booking_number}",
+                    "amount": {
+                        "currency_code": "EUR",
+                        "value": str(deposit_amount)
+                    }
+                }]
+            }
+        )
+        
+        order = order_response.json()
+        
+        # Update booking with PayPal order ID
+        await db.bookings.update_one(
+            {"id": booking["id"]},
+            {"$set": {"paypal_order_id": order["id"]}}
+        )
+        
+        return {"order_id": order["id"], "booking_id": booking["id"]}
+
+@api_router.post("/payments/paypal/capture-order")
+async def capture_paypal_order(capture_data: PayPalCaptureRequest):
+    """Capture a PayPal order after approval."""
+    import httpx
+    
+    client_id = os.environ.get('PAYPAL_CLIENT_ID')
+    client_secret = os.environ.get('PAYPAL_SECRET')
+    
+    async with httpx.AsyncClient() as client:
+        # Get access token
+        auth_response = await client.post(
+            "https://api-m.paypal.com/v1/oauth2/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"}
+        )
+        access_token = auth_response.json()["access_token"]
+        
+        # Capture the order
+        capture_response = await client.post(
+            f"https://api-m.paypal.com/v2/checkout/orders/{capture_data.order_id}/capture",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {access_token}"
+            }
+        )
+        
+        capture = capture_response.json()
+        
+        if capture.get("status") == "COMPLETED":
+            # Find and update booking
+            booking = await db.bookings.find_one({"paypal_order_id": capture_data.order_id}, {"_id": 0})
+            if booking:
+                await db.bookings.update_one(
+                    {"id": booking["id"]},
+                    {"$set": {
+                        "payment_status": "deposit_paid",
+                        "paypal_capture_id": capture["purchase_units"][0]["payments"]["captures"][0]["id"],
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+                
+                # Create payment transaction record
+                await db.payment_transactions.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "booking_id": booking["id"],
+                    "payment_method": "paypal",
+                    "paypal_order_id": capture_data.order_id,
+                    "paypal_capture_id": capture["purchase_units"][0]["payments"]["captures"][0]["id"],
+                    "amount": booking["deposit_amount"],
+                    "status": "completed",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Send confirmation email with invoice
+                hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+                if hotel:
+                    updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
+                    pdf = generate_invoice_pdf(updated_booking, hotel, booking.get("language", "de"))
+                    
+                    lang = booking.get("language", "de")
+                    if lang == "de":
+                        subject = f"Buchungsbestätigung - {booking['booking_number']}"
+                        body = f"""
+                        <html><body>
+                        <h2>Vielen Dank für Ihre Buchung!</h2>
+                        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                        <p>Ihre Anzahlung über <strong>{booking['deposit_amount']:.2f} €</strong> wurde erfolgreich per PayPal bezahlt.</p>
+                        <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
+                        <p>Hotel: {hotel['name']}</p>
+                        <p>Anreise: {booking['check_in']}</p>
+                        <p>Abreise: {booking['check_out']}</p>
+                        <p>Der Restbetrag von <strong>{booking['remaining_amount']:.2f} €</strong> ist 6 Wochen vor Anreise fällig.</p>
+                        <p>Anbei finden Sie Ihre Rechnung.</p>
+                        <p>Mit freundlichen Grüßen,<br>Travel Events</p>
+                        </body></html>
+                        """
+                    else:
+                        subject = f"Booking Confirmation - {booking['booking_number']}"
+                        body = f"""
+                        <html><body>
+                        <h2>Thank you for your booking!</h2>
+                        <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                        <p>Your deposit of <strong>€{booking['deposit_amount']:.2f}</strong> has been paid via PayPal.</p>
+                        <p>Booking number: <strong>{booking['booking_number']}</strong></p>
+                        <p>Hotel: {hotel['name']}</p>
+                        <p>Check-in: {booking['check_in']}</p>
+                        <p>Check-out: {booking['check_out']}</p>
+                        <p>The remaining amount of <strong>€{booking['remaining_amount']:.2f}</strong> is due 6 weeks before arrival.</p>
+                        <p>Please find your invoice attached.</p>
+                        <p>Best regards,<br>Travel Events</p>
+                        </body></html>
+                        """
+                    
+                    await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
+                
+                return {"status": "COMPLETED", "booking_id": booking["id"]}
+        
+        return {"status": capture.get("status", "FAILED"), "error": capture.get("message")}
+
 # ============== INVOICE DOWNLOAD ==============
 
 @api_router.get("/bookings/{booking_id}/invoice")

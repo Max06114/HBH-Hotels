@@ -17,8 +17,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popove
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { CalendarIcon, CreditCard, ArrowLeft, MapPin, Star, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const PAYPAL_CLIENT_ID = 'AdEM1S0q9rhuwWjF2PpmTcDeykYwaQRpApCFmhJOEHxTNuLXGO0oGqPiR35AfdKHq69VqL6nqc8v6Uq_';
 
 // German price format helper (comma as decimal separator)
 const formatPrice = (price) => {
@@ -431,6 +433,76 @@ const BookingPage = () => {
                       )}
                       {t('payWithStripe')} {priceInfo && `(${formatPrice(priceInfo.deposit)} € ${t('deposit')})`}
                     </Button>
+
+                    {/* PayPal Button */}
+                    {priceInfo && (
+                      <div className="mt-4">
+                        <div className="relative flex items-center justify-center my-4">
+                          <div className="border-t border-[#E5E0D5] flex-grow"></div>
+                          <span className="px-4 text-sm text-[#4A4A4A]">{language === 'de' ? 'oder' : 'or'}</span>
+                          <div className="border-t border-[#E5E0D5] flex-grow"></div>
+                        </div>
+                        <PayPalScriptProvider options={{ 
+                          clientId: PAYPAL_CLIENT_ID,
+                          currency: "EUR",
+                          locale: language === 'de' ? 'de_DE' : 'en_US'
+                        }}>
+                          <PayPalButtons
+                            style={{ 
+                              layout: "horizontal",
+                              color: "blue",
+                              shape: "pill",
+                              label: "pay",
+                              height: 50
+                            }}
+                            disabled={submitting}
+                            createOrder={async () => {
+                              try {
+                                // First create the booking
+                                const bookingData = {
+                                  hotel_id: hotelId,
+                                  salutation: formData.salutation,
+                                  first_name: formData.firstName,
+                                  last_name: formData.lastName,
+                                  email: formData.email,
+                                  street: formData.street,
+                                  postal_code: formData.postalCode,
+                                  city: formData.city,
+                                  country: formData.country,
+                                  room_type: formData.roomType,
+                                  check_in: format(checkIn, 'yyyy-MM-dd'),
+                                  check_out: format(checkOut, 'yyyy-MM-dd'),
+                                  notes: formData.notes,
+                                  payment_method: 'paypal'
+                                };
+                                
+                                const response = await axios.post(`${API}/payments/paypal/create-order`, bookingData);
+                                return response.data.order_id;
+                              } catch (error) {
+                                toast.error(language === 'de' ? 'Fehler bei PayPal-Bestellung' : 'PayPal order error');
+                                throw error;
+                              }
+                            }}
+                            onApprove={async (data) => {
+                              try {
+                                const response = await axios.post(`${API}/payments/paypal/capture-order`, {
+                                  order_id: data.orderID
+                                });
+                                if (response.data.status === 'COMPLETED') {
+                                  navigate(`/confirmation?session_id=${response.data.booking_id}&method=paypal`);
+                                }
+                              } catch (error) {
+                                toast.error(language === 'de' ? 'Zahlung fehlgeschlagen' : 'Payment failed');
+                              }
+                            }}
+                            onError={(err) => {
+                              console.error('PayPal Error:', err);
+                              toast.error(language === 'de' ? 'PayPal-Fehler' : 'PayPal error');
+                            }}
+                          />
+                        </PayPalScriptProvider>
+                      </div>
+                    )}
 
                     <p className="text-xs text-[#4A4A4A] text-center">
                       {t('paymentInfo')}
