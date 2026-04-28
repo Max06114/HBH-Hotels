@@ -127,7 +127,7 @@ const HomePage = () => {
             <p className="text-[#4A4A4A] leading-relaxed">
               {language === 'de' ? (
                 <>
-                  <strong className="text-[#6B1D2A]">Mit den folgenden Hotels haben wir die besten Preise ausgehandelt.</strong> Übernachtung ist möglich ab 75,50 € im geteilten Doppelzimmer. <strong>Frühstück und Bettensteuer sind inklusive.</strong> Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.
+                  <strong className="text-[#6B1D2A]">Mit den folgenden Hotels haben wir die besten Preise ausgehandelt.</strong> Übernachtung ist möglich ab 89 € im geteilten Doppelzimmer. <strong>Frühstück und Bettensteuer sind inklusive.</strong> Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.
                 </>
               ) : (
                 <>

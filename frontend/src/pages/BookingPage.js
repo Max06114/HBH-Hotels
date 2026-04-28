@@ -29,9 +29,9 @@ const BookingPage = () => {
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  // Default dates: 25.02.2027 - 28.02.2027
+  // Default dates: 25.02.2027 - 27.02.2027
   const [checkIn, setCheckIn] = useState(new Date(2027, 1, 25)); // February is month 1 (0-indexed)
-  const [checkOut, setCheckOut] = useState(new Date(2027, 1, 28));
+  const [checkOut, setCheckOut] = useState(new Date(2027, 1, 27));
 
   const [formData, setFormData] = useState({
     salutation: '',
