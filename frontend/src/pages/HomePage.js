@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
 import { motion } from 'framer-motion';
@@ -10,6 +10,11 @@ import { Button } from '../components/ui/button';
 import { Music, Users, Calendar, MapPin, ArrowDown, Loader2, Map } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Animation configs - extracted to prevent re-creation on every render
+const fadeInUp = { initial: { opacity: 0, y: 30 }, animate: { opacity: 1, y: 0 } };
+const fadeInUpTransition = { duration: 0.8 };
+const staggerContainer = { animate: { transition: { staggerChildren: 0.1 } } };
 
 const HomePage = () => {
   const { language, t } = useLanguage();
@@ -56,9 +61,9 @@ const HomePage = () => {
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+            initial={fadeInUp.initial}
+            animate={fadeInUp.animate}
+            transition={fadeInUpTransition}
             className="max-w-3xl"
           >
             <span className="inline-block text-[#D4AF37] text-sm font-semibold tracking-[0.2em] uppercase mb-4">

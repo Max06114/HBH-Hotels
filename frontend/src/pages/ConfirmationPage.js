@@ -28,6 +28,7 @@ const ConfirmationPage = () => {
     } else {
       setStatus('error');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const pollPaymentStatus = async () => {

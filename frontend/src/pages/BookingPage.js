@@ -48,6 +48,7 @@ const BookingPage = () => {
 
   useEffect(() => {
     fetchHotel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotelId]);
 
   const fetchHotel = async () => {

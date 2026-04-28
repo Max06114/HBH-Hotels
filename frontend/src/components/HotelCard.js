@@ -117,9 +117,9 @@ const HotelCard = ({ hotel, index }) => {
 
         {/* Amenities */}
         <div className="flex flex-wrap gap-2 mb-6">
-          {amenities.slice(0, 3).map((amenity, i) => (
+          {amenities.slice(0, 3).map((amenity) => (
             <span 
-              key={i} 
+              key={amenity} 
               className="flex items-center gap-1 text-xs bg-[#F5F2EA] text-[#4A4A4A] px-2 py-1 rounded-full"
             >
               <Check className="w-3 h-3 text-[#2E7D32]" />
