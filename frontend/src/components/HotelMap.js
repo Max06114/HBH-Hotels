@@ -173,7 +173,7 @@ const HotelMap = ({ hotels = [] }) => {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#D4AF37] rounded-full"></span>
-            <span>{language === 'de' ? 'Händel-Sehenswürdigkeiten' : 'Händel Sights'}</span>
+            <span>{language === 'de' ? 'Happy-Birthday-Händel-Locations' : 'Happy Birthday Händel Locations'}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#1A1A1A] rounded-full"></span>
