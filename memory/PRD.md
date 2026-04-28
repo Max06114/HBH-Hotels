@@ -1,85 +1,107 @@
-# Happy Birthday Händel - Hotel Booking System
+# Happy Birthday Händel - Hotel Booking Platform
 
 ## Original Problem Statement
-Hotel booking website for "Happy Birthday Händel" choir festival similar to travel-events.de but with automatic invoicing and payment functionality.
-
-## Architecture
-- **Backend**: FastAPI + MongoDB
-- **Frontend**: React + Tailwind CSS + Shadcn/UI
-- **Payments**: Stripe (PayPal prepared but needs credentials)
-- **Email**: SMTP via Strato (info@travel-events.de)
-- **PDF**: ReportLab for invoice generation
-
-## User Personas
-1. **Choir Singers**: Book hotels for HBH 2026 festival (DE/EN)
-2. **Admin (Travel Events)**: Manage hotels, bookings, payments, reminders
+Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germany.
 
 ## Core Requirements
-- [x] Hotel listings with images, descriptions, prices
-- [x] Booking form with guest details, room type, dates
-- [x] Stripe payment integration (25% deposit)
-- [x] PDF invoice generation (download + email)
-- [x] Admin dashboard with stats
+- Automatic invoicing (PDF generation and download) with email dispatch via Strato SMTP
+- Payment integration with Stripe and PayPal
+- Admin dashboard to manage hotel details, view bookings/payment statuses, and handle cancellations/refunds
+- Interactive map showing specific venues and hotels
+- Automated payment reminders sent 6 weeks before arrival
+- Image Manager in the admin dashboard with drag-and-drop sorting
+- DE/EN language availability
+
+## User Personas
+- **Festival Attendees**: Book hotels for the Händel festival
+- **Admin (Travel Events)**: Manage hotels, bookings, payments, and images
+
+## What's Been Implemented
+
+### Phase 1 - Core Platform (DONE)
+- [x] FastAPI backend with MongoDB
+- [x] React frontend with Shadcn UI
+- [x] User booking flow
+- [x] Hotel listing with multi-image gallery
+- [x] Stripe payment integration
+- [x] PDF invoice generation (ReportLab)
+- [x] SMTP email sending (Strato)
+- [x] DE/EN language support
+
+### Phase 2 - Admin Dashboard (DONE)
+- [x] Admin login/authentication
+- [x] Booking management with cancellation
 - [x] Hotel management (CRUD)
-- [x] Booking management with payment status
-- [x] Cancellation functionality
-- [x] Bilingual support (DE/EN)
-- [x] Payment reminders (6 weeks before arrival)
-- [x] High-quality hotel images
+- [x] Payment overview
+- [x] Payment reminders system
 
-## What's Been Implemented (Jan 2026)
-### Phase 1 (Initial)
-- Full hotel booking flow with 4 partner hotels
-- Stripe checkout for deposit payments
-- PDF invoice auto-generation
-- Email notifications via SMTP
-- Admin panel with login, dashboard, hotels, bookings, payments
-- Language switcher (German/English)
+### Phase 3 - Map & Images (DONE - April 2026)
+- [x] Interactive Leaflet map with custom icons
+- [x] Correct GPS coordinates for venues/hotels
+- [x] Image Manager with Emergent Object Storage
+- [x] Drag & Drop image sorting (@dnd-kit)
+- [x] First sorted image = main exterior view
 
-### Phase 2 (Update)
-- Payment reminder system for bookings 6 weeks before check-in
-- Admin page for managing/sending reminders
-- Updated hotel images from quality sources
-- Proper hotel addresses added
+## Current Architecture
 
-## API Endpoints
-### Public
-- GET /api/hotels - List active hotels
-- POST /api/bookings - Create booking
-- POST /api/payments/stripe/create-session - Initiate payment
-- GET /api/bookings/{id}/invoice - Download invoice
+```
+/app/
+├── backend/
+│   ├── server.py              # Main API (FastAPI, MongoDB, Stripe, Email, PDF)
+│   ├── requirements.txt
+│   └── .env                   
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── HotelCard.js   # Hotel gallery with sorted images
+│   │   │   ├── HotelMap.js    # Leaflet map
+│   │   │   ├── Header.js
+│   │   │   └── Footer.js
+│   │   ├── pages/
+│   │   │   ├── HomePage.js
+│   │   │   ├── BookingPage.js
+│   │   │   ├── AdminDashboard.js  # Image Manager with DnD sorting
+│   │   │   ├── AdminLoginPage.js
+│   │   │   └── ConfirmationPage.js
+│   │   └── context/
+│   │       ├── LanguageContext.js
+│   │       └── AuthContext.js
+```
 
-### Admin
-- POST /api/admin/login - Admin authentication
-- GET/POST/PUT/DELETE /api/admin/hotels - Hotel CRUD
-- GET /api/admin/bookings - List all bookings
-- POST /api/bookings/{id}/cancel - Cancel booking
-- GET /api/admin/pending-reminders - Get bookings needing reminders
-- POST /api/admin/send-reminders - Send payment reminder emails
+## Key Database Schema
+- `hotels`: {id, name, stars, price, description, coordinates, images (URLs), image_ids (ordered IDs)}
+- `bookings`: {id, hotel_id, user_email, dates, total_price, status, payment_intent_id}
+- `images`: {id, hotel_id, object_storage_key, original_filename}
+- `admins`: {id, email, password_hash}
+- `payment_transactions`: {id, booking_id, session_id, amount, status}
 
-## Admin Credentials
-- Email: info@travel-events.de
-- Password: admin123
+## Key API Endpoints
+- `GET /api/hotels` - List hotels with images in sorted order
+- `PUT /api/admin/hotels/{id}/images` - Update hotel images with new order
+- `GET /api/admin/images?hotel_id=x` - Get images for hotel in saved order
+- `POST /api/bookings` - Create booking
+- `POST /api/payments/stripe/create-session` - Create Stripe checkout
 
-## Hotels
-1. 4* Hotel the niu Ridge - 109€/131€ (Single/Double)
-2. 4* Hotel Rotes Ross - 113€/133€
-3. 4* Hotel Ankerhof - 128€/175€
-4. 4* Dorint Hotel Charlottenhof - 155€/196€
+## 3rd Party Integrations
+- **Stripe** (Payments) - via emergentintegrations
+- **PayPal** (Payments) - @paypal/react-paypal-js
+- **Emergent Object Storage** - for image uploads
+- **Strato SMTP** - for emails
 
 ## Prioritized Backlog
-### P0 (Done)
-- Core booking flow ✓
-- Payment integration ✓
-- Invoice generation ✓
-- Payment reminders ✓
 
-### P1 (Next)
-- PayPal integration (needs PAYPAL_CLIENT_ID and PAYPAL_SECRET)
-- Automated cron job for reminders (currently manual trigger)
+### P1 - High Priority
+- [ ] PayPal integration End-to-End verification
+- [ ] Cancellation/refund flow testing (Stripe/PayPal)
 
-### P2 (Future)
-- Booking modification feature
-- Multiple room booking
-- Waiting list functionality
-- Export bookings to Excel
+### P2 - Medium Priority
+- [ ] Automated payment reminders (cron job)
+- [ ] Email template improvements
+
+### P3 - Low Priority
+- [ ] Server.py refactoring (split into modules)
+- [ ] Additional admin analytics
+
+## Credentials (Test)
+- Admin: info@travel-events.de / admin123
+- SMTP: smtp.strato.de / info@travel-events.de / 1685MvA:-)

@@ -116,6 +116,7 @@ class Hotel(BaseModel):
     amenities: List[str] = []
     amenities_en: List[str] = []
     images: List[str] = []
+    image_ids: List[str] = []
     single_price: float
     double_price: float
     twin_price: Optional[float] = None
@@ -1143,11 +1144,37 @@ async def admin_list_images(
     hotel_id: Optional[str] = None,
     admin: dict = Depends(get_current_admin)
 ):
-    """List all images, optionally filtered by hotel."""
-    query = {"is_deleted": False}
-    if hotel_id:
-        query["hotel_id"] = hotel_id
+    """List all images, optionally filtered by hotel. Returns images in saved order if hotel_id is provided."""
+    import re
     
+    if hotel_id:
+        # Get hotel to find the saved image order
+        hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+        if hotel:
+            # Extract image IDs from URLs in hotel.images
+            image_ids = hotel.get("image_ids", [])
+            
+            # If image_ids is empty, extract from images URLs
+            if not image_ids and hotel.get("images"):
+                for img_url in hotel["images"]:
+                    # Extract ID from /api/images/{id} format
+                    match = re.search(r'/api/images/([a-f0-9-]+)', img_url)
+                    if match:
+                        image_ids.append(match.group(1))
+            
+            if image_ids:
+                # Return images in the saved order - only images that exist in image_ids
+                all_images = await db.images.find({"id": {"$in": image_ids}, "is_deleted": False}, {"_id": 0}).to_list(100)
+                # Sort by the order in image_ids
+                images_dict = {img["id"]: img for img in all_images}
+                ordered_images = [images_dict[img_id] for img_id in image_ids if img_id in images_dict]
+                return ordered_images
+            else:
+                # No internal images found - return empty list
+                return []
+    
+    # All images (unfiltered)
+    query = {"is_deleted": False}
     images = await db.images.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return images
 

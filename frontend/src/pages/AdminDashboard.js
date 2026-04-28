@@ -13,10 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, Menu, X, 
   Plus, Edit, Trash2, Download, Eye, Ban, Loader2, Music, Users, Euro, TrendingUp,
-  Bell, Mail, Clock, Image, Upload, Check
+  Bell, Mail, Clock, Image, Upload, Check, GripVertical
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -758,6 +761,141 @@ const RemindersManagement = () => {
   );
 };
 
+// Sortable Image Item for selection
+const SortableImageItem = ({ image, index, isSelected, onToggle, onDelete, getImageUrl, hotels }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: image.id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
+  };
+
+  const labels = ['Außenansicht', 'Zimmer', 'Restaurant'];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative group rounded-lg overflow-hidden border-2 transition-colors ${
+        isSelected ? 'border-[#6B1D2A]' : 'border-[#E5E0D5] hover:border-[#D4AF37]'
+      }`}
+    >
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute top-2 left-2 w-6 h-6 bg-white/90 rounded cursor-grab active:cursor-grabbing flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <GripVertical className="w-4 h-4 text-[#4A4A4A]" />
+      </div>
+
+      {/* Position badge */}
+      <div className="absolute top-2 left-10 bg-[#D4AF37] text-white text-xs px-2 py-0.5 rounded-full font-medium">
+        {index + 1}. {labels[index] || `Bild ${index + 1}`}
+      </div>
+
+      <img
+        src={getImageUrl(image.id)}
+        alt={image.original_filename}
+        className="w-full h-32 object-cover cursor-pointer"
+        onClick={() => onToggle(image.id)}
+      />
+      
+      {/* Selection indicator */}
+      {isSelected && (
+        <div 
+          className="absolute bottom-2 left-2 w-6 h-6 bg-[#6B1D2A] rounded-full flex items-center justify-center cursor-pointer"
+          onClick={() => onToggle(image.id)}
+        >
+          <Check className="w-4 h-4 text-white" />
+        </div>
+      )}
+      
+      {/* Delete button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(image.id); }}
+        className="absolute top-2 right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+
+      {/* Info overlay */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <p className="truncate">{image.original_filename}</p>
+        {image.hotel_id && (
+          <p className="text-[#D4AF37] truncate">
+            {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Sortable Hotel Image for sorting within a hotel filter
+const SortableHotelImage = ({ image, index, onDelete, getImageUrl, hotels, language }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: image.id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
+  };
+
+  const labels = language === 'de' 
+    ? ['Außenansicht', 'Zimmer', 'Restaurant/Lobby']
+    : ['Exterior', 'Room', 'Restaurant/Lobby'];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative group rounded-lg overflow-hidden border-2 border-[#E5E0D5] hover:border-[#D4AF37] transition-colors"
+    >
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute top-2 left-2 w-8 h-8 bg-white/90 rounded cursor-grab active:cursor-grabbing flex items-center justify-center z-10"
+      >
+        <GripVertical className="w-5 h-5 text-[#4A4A4A]" />
+      </div>
+
+      {/* Position badge */}
+      <div className="absolute top-2 left-12 bg-[#D4AF37] text-white text-xs px-2 py-1 rounded-full font-medium">
+        {index + 1}. {labels[index] || `${language === 'de' ? 'Bild' : 'Image'} ${index + 1}`}
+      </div>
+
+      <img
+        src={getImageUrl(image.id)}
+        alt={image.original_filename}
+        className="w-full h-32 object-cover"
+      />
+      
+      {/* Delete button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(image.id); }}
+        className="absolute top-2 right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+
+      {/* Info overlay */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <p className="truncate">{image.original_filename}</p>
+        {image.hotel_id && (
+          <p className="text-[#D4AF37] truncate">
+            {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Image Manager Component
 const ImageManager = () => {
   const { language } = useLanguage();
@@ -770,6 +908,11 @@ const ImageManager = () => {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [assignToHotel, setAssignToHotel] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   useEffect(() => {
     fetchImages();
@@ -833,6 +976,7 @@ const ImageManager = () => {
     try {
       await axios.delete(`${API}/admin/images/${imageId}`, { headers: getAuthHeaders() });
       toast.success(language === 'de' ? 'Bild gelöscht' : 'Image deleted');
+      setSelectedImages(prev => prev.filter(id => id !== imageId));
       fetchImages();
     } catch (error) {
       toast.error(language === 'de' ? 'Fehler beim Löschen' : 'Error deleting');
@@ -847,16 +991,57 @@ const ImageManager = () => {
     );
   };
 
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = selectedImages.indexOf(active.id);
+      const newIndex = selectedImages.indexOf(over.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(selectedImages, oldIndex, newIndex);
+        setSelectedImages(newOrder);
+      }
+    }
+  };
+
+  // Handle drag end for images already assigned to a hotel (in filter view)
+  const handleHotelImagesDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || selectedHotel === 'all') return;
+    
+    const oldIndex = images.findIndex(img => img.id === active.id);
+    const newIndex = images.findIndex(img => img.id === over.id);
+    
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrder = arrayMove(images, oldIndex, newIndex);
+      setImages(newOrder);
+      
+      // Save new order to backend
+      const imageIds = newOrder.map(img => img.id);
+      try {
+        await axios.put(
+          `${API}/admin/hotels/${selectedHotel}/images`,
+          imageIds,
+          { headers: getAuthHeaders() }
+        );
+        toast.success(language === 'de' ? 'Reihenfolge gespeichert!' : 'Order saved!');
+      } catch (error) {
+        toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving order');
+        fetchImages(); // Revert on error
+      }
+    }
+  };
+
   const handleAssignToHotel = async () => {
     if (!assignToHotel || selectedImages.length === 0) return;
 
     try {
+      // Send images in the sorted order
       await axios.put(
         `${API}/admin/hotels/${assignToHotel}/images`,
         selectedImages,
         { headers: getAuthHeaders() }
       );
-      toast.success(language === 'de' ? 'Bilder zugewiesen' : 'Images assigned');
+      toast.success(language === 'de' ? 'Bilder zugewiesen (in gewählter Reihenfolge)' : 'Images assigned (in selected order)');
       setAssignDialogOpen(false);
       setSelectedImages([]);
       fetchImages();
@@ -869,6 +1054,9 @@ const ImageManager = () => {
   const getImageUrl = (imageId) => {
     return `${process.env.REACT_APP_BACKEND_URL}/api/images/${imageId}`;
   };
+
+  // Get selected images in order for preview
+  const selectedImagesData = selectedImages.map(id => images.find(img => img.id === id)).filter(Boolean);
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-[#6B1D2A]" /></div>;
@@ -911,69 +1099,134 @@ const ImageManager = () => {
         </div>
       </div>
 
+      {/* Selected Images Preview with Drag & Drop */}
+      {selectedImages.length > 0 && (
+        <Card className="border-[#6B1D2A] bg-[#6B1D2A]/5 mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <GripVertical className="w-5 h-5 text-[#6B1D2A]" />
+              <Label className="text-[#6B1D2A] font-semibold">
+                {language === 'de' ? 'Ausgewählte Bilder (ziehen zum Sortieren):' : 'Selected Images (drag to sort):'}
+              </Label>
+            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={selectedImages} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {selectedImagesData.map((image, index) => (
+                    <SortableImageItem
+                      key={image.id}
+                      image={image}
+                      index={index}
+                      isSelected={true}
+                      onToggle={toggleImageSelection}
+                      onDelete={handleDelete}
+                      getImageUrl={getImageUrl}
+                      hotels={hotels}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <p className="text-xs text-[#4A4A4A] mt-3">
+              {language === 'de' 
+                ? '1. Außenansicht • 2. Zimmer • 3. Restaurant/Lobby' 
+                : '1. Exterior • 2. Room • 3. Restaurant/Lobby'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filter */}
       <Card className="border-[#E5E0D5] mb-6">
         <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <Label>{language === 'de' ? 'Filter nach Hotel:' : 'Filter by Hotel:'}</Label>
-            <Select value={selectedHotel} onValueChange={setSelectedHotel}>
-              <SelectTrigger className="w-64">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{language === 'de' ? 'Alle Bilder' : 'All Images'}</SelectItem>
-                {hotels.map(hotel => (
-                  <SelectItem key={hotel.id} value={hotel.id}>{hotel.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <Label>{language === 'de' ? 'Filter nach Hotel:' : 'Filter by Hotel:'}</Label>
+              <Select value={selectedHotel} onValueChange={setSelectedHotel}>
+                <SelectTrigger className="w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'de' ? 'Alle Bilder' : 'All Images'}</SelectItem>
+                  {hotels.map(hotel => (
+                    <SelectItem key={hotel.id} value={hotel.id}>{hotel.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedHotel !== 'all' && (
+              <div className="flex items-center gap-2 text-sm text-[#6B1D2A] bg-[#6B1D2A]/10 px-3 py-2 rounded-lg">
+                <GripVertical className="w-4 h-4" />
+                <span>{language === 'de' ? 'Bilder per Drag & Drop sortieren' : 'Drag & drop to sort images'}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Image Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {images.map((image) => (
-          <div 
-            key={image.id} 
-            className={`relative group rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
-              selectedImages.includes(image.id) ? 'border-[#6B1D2A]' : 'border-[#E5E0D5] hover:border-[#D4AF37]'
-            }`}
-            onClick={() => toggleImageSelection(image.id)}
-          >
-            <img
-              src={getImageUrl(image.id)}
-              alt={image.original_filename}
-              className="w-full h-32 object-cover"
-            />
-            
-            {/* Selection indicator */}
-            {selectedImages.includes(image.id) && (
-              <div className="absolute top-2 left-2 w-6 h-6 bg-[#6B1D2A] rounded-full flex items-center justify-center">
-                <Check className="w-4 h-4 text-white" />
-              </div>
-            )}
-            
-            {/* Delete button */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(image.id); }}
-              className="absolute top-2 right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-
-            {/* Info overlay */}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <p className="truncate">{image.original_filename}</p>
-              {image.hotel_id && (
-                <p className="text-[#D4AF37] truncate">
-                  {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
-                </p>
-              )}
+      {/* All Images Grid - with drag & drop when hotel is selected */}
+      {selectedHotel !== 'all' ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleHotelImagesDragEnd}>
+          <SortableContext items={images.map(img => img.id)} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {images.map((image, index) => (
+                <SortableHotelImage
+                  key={image.id}
+                  image={image}
+                  index={index}
+                  onDelete={handleDelete}
+                  getImageUrl={getImageUrl}
+                  hotels={hotels}
+                  language={language}
+                />
+              ))}
             </div>
-          </div>
-        ))}
-      </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {images.map((image) => (
+            <div 
+              key={image.id} 
+              className={`relative group rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
+                selectedImages.includes(image.id) ? 'border-[#6B1D2A] ring-2 ring-[#6B1D2A]/30' : 'border-[#E5E0D5] hover:border-[#D4AF37]'
+              }`}
+              onClick={() => toggleImageSelection(image.id)}
+            >
+              <img
+                src={getImageUrl(image.id)}
+                alt={image.original_filename}
+                className="w-full h-32 object-cover"
+              />
+              
+              {/* Selection indicator with number */}
+              {selectedImages.includes(image.id) && (
+                <div className="absolute top-2 left-2 w-6 h-6 bg-[#6B1D2A] rounded-full flex items-center justify-center text-white text-xs font-bold">
+                  {selectedImages.indexOf(image.id) + 1}
+                </div>
+              )}
+              
+              {/* Delete button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDelete(image.id); }}
+                className="absolute top-2 right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+
+              {/* Info overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="truncate">{image.original_filename}</p>
+                {image.hotel_id && (
+                  <p className="text-[#D4AF37] truncate">
+                    {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {images.length === 0 && (
         <div className="text-center py-12 text-[#4A4A4A]">
@@ -1005,10 +1258,24 @@ const ImageManager = () => {
                 ))}
               </SelectContent>
             </Select>
+            
+            {/* Preview order */}
+            <div className="mt-4 p-3 bg-[#F5F2EA] rounded-lg">
+              <p className="text-sm font-medium mb-2">{language === 'de' ? 'Reihenfolge:' : 'Order:'}</p>
+              <div className="flex gap-2 overflow-x-auto">
+                {selectedImagesData.map((img, idx) => (
+                  <div key={img.id} className="flex-shrink-0 text-center">
+                    <img src={getImageUrl(img.id)} alt="" className="w-16 h-12 object-cover rounded" />
+                    <p className="text-xs text-[#4A4A4A] mt-1">{idx + 1}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
             <p className="text-sm text-[#4A4A4A] mt-4">
               {language === 'de' 
-                ? `${selectedImages.length} Bilder werden als Hotelbilder gesetzt (Außenansicht, Zimmer, Restaurant).`
-                : `${selectedImages.length} images will be set as hotel images (Exterior, Room, Restaurant).`}
+                ? 'Die Bilder werden in dieser Reihenfolge angezeigt (1. Außenansicht, 2. Zimmer, 3. Restaurant).'
+                : 'Images will be displayed in this order (1. Exterior, 2. Room, 3. Restaurant).'}
             </p>
           </div>
           <DialogFooter>
