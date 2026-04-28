@@ -19,7 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, Menu, X, 
   Plus, Edit, Trash2, Download, Eye, Ban, Loader2, Music, Users, Euro, TrendingUp,
-  Bell, Mail, Clock, Image, Upload, Check, GripVertical
+  Bell, Mail, Clock, Image, Upload, Check, GripVertical, Pencil
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -835,7 +835,7 @@ const SortableImageItem = ({ image, index, isSelected, onToggle, onDelete, getIm
 };
 
 // Sortable Hotel Image for sorting within a hotel filter
-const SortableHotelImage = ({ image, index, onDelete, getImageUrl, hotels, language }) => {
+const SortableHotelImage = ({ image, index, onDelete, onRename, getImageUrl, hotels, language }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: image.id });
   
   const style = {
@@ -845,9 +845,7 @@ const SortableHotelImage = ({ image, index, onDelete, getImageUrl, hotels, langu
     zIndex: isDragging ? 1000 : 1,
   };
 
-  const labels = language === 'de' 
-    ? ['Außenansicht', 'Zimmer', 'Restaurant/Lobby']
-    : ['Exterior', 'Room', 'Restaurant/Lobby'];
+  const displayName = image.custom_name || image.original_filename;
 
   return (
     <div
@@ -865,16 +863,25 @@ const SortableHotelImage = ({ image, index, onDelete, getImageUrl, hotels, langu
       </div>
 
       {/* Position badge */}
-      <div className="absolute top-2 left-12 bg-[#D4AF37] text-white text-xs px-2 py-1 rounded-full font-medium">
-        {index + 1}. {labels[index] || `${language === 'de' ? 'Bild' : 'Image'} ${index + 1}`}
+      <div className="absolute top-2 left-12 bg-[#D4AF37] text-white text-xs px-2 py-1 rounded-full font-medium max-w-[60%] truncate">
+        {index + 1}. {displayName}
       </div>
 
       <img
         src={getImageUrl(image.id)}
-        alt={image.original_filename}
+        alt={displayName}
         className="w-full h-32 object-cover"
       />
       
+      {/* Rename button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onRename(image); }}
+        className="absolute top-2 right-10 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        title={language === 'de' ? 'Umbenennen' : 'Rename'}
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+
       {/* Delete button */}
       <button
         onClick={(e) => { e.stopPropagation(); onDelete(image.id); }}
@@ -885,7 +892,7 @@ const SortableHotelImage = ({ image, index, onDelete, getImageUrl, hotels, langu
 
       {/* Info overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <p className="truncate">{image.original_filename}</p>
+        <p className="truncate">{displayName}</p>
         {image.hotel_id && (
           <p className="text-[#D4AF37] truncate">
             {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
@@ -908,6 +915,9 @@ const ImageManager = () => {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [assignToHotel, setAssignToHotel] = useState('');
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamingImage, setRenamingImage] = useState(null);
+  const [newImageName, setNewImageName] = useState('');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -937,6 +947,31 @@ const ImageManager = () => {
       setHotels(response.data);
     } catch (error) {
       console.error('Error fetching hotels:', error);
+    }
+  };
+
+  const handleOpenRenameDialog = (image) => {
+    setRenamingImage(image);
+    setNewImageName(image.custom_name || '');
+    setRenameDialogOpen(true);
+  };
+
+  const handleRenameImage = async () => {
+    if (!renamingImage || !newImageName.trim()) return;
+    
+    try {
+      await axios.put(
+        `${API}/admin/images/${renamingImage.id}/rename`,
+        { custom_name: newImageName.trim() },
+        { headers: getAuthHeaders() }
+      );
+      toast.success(language === 'de' ? 'Bild umbenannt' : 'Image renamed');
+      setRenameDialogOpen(false);
+      setRenamingImage(null);
+      setNewImageName('');
+      fetchImages();
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Umbenennen' : 'Error renaming');
     }
   };
 
@@ -1175,6 +1210,7 @@ const ImageManager = () => {
                   image={image}
                   index={index}
                   onDelete={handleDelete}
+                  onRename={handleOpenRenameDialog}
                   getImageUrl={getImageUrl}
                   hotels={hotels}
                   language={language}
@@ -1195,7 +1231,7 @@ const ImageManager = () => {
             >
               <img
                 src={getImageUrl(image.id)}
-                alt={image.original_filename}
+                alt={image.custom_name || image.original_filename}
                 className="w-full h-32 object-cover"
               />
               
@@ -1206,6 +1242,15 @@ const ImageManager = () => {
                 </div>
               )}
               
+              {/* Rename button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleOpenRenameDialog(image); }}
+                className="absolute top-2 right-10 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                title={language === 'de' ? 'Umbenennen' : 'Rename'}
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+
               {/* Delete button */}
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(image.id); }}
@@ -1216,7 +1261,7 @@ const ImageManager = () => {
 
               {/* Info overlay */}
               <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <p className="truncate">{image.original_filename}</p>
+                <p className="truncate">{image.custom_name || image.original_filename}</p>
                 {image.hotel_id && (
                   <p className="text-[#D4AF37] truncate">
                     {hotels.find(h => h.id === image.hotel_id)?.name || 'Hotel'}
@@ -1288,6 +1333,53 @@ const ImageManager = () => {
               className="bg-[#6B1D2A] hover:bg-[#8A2536]"
             >
               {language === 'de' ? 'Zuweisen' : 'Assign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {language === 'de' ? 'Bild umbenennen' : 'Rename Image'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {renamingImage && (
+              <div className="mb-4">
+                <img 
+                  src={getImageUrl(renamingImage.id)} 
+                  alt="" 
+                  className="w-full h-32 object-cover rounded-lg"
+                />
+              </div>
+            )}
+            <Label>{language === 'de' ? 'Neuer Name:' : 'New name:'}</Label>
+            <Input 
+              value={newImageName}
+              onChange={(e) => setNewImageName(e.target.value)}
+              placeholder={language === 'de' ? 'z.B. Außenansicht, Lobby, Zimmer...' : 'e.g. Exterior, Lobby, Room...'}
+              className="mt-2"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameImage(); }}
+            />
+            <p className="text-xs text-[#4A4A4A] mt-2">
+              {language === 'de' 
+                ? `Originaler Dateiname: ${renamingImage?.original_filename || ''}`
+                : `Original filename: ${renamingImage?.original_filename || ''}`}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              {language === 'de' ? 'Abbrechen' : 'Cancel'}
+            </Button>
+            <Button 
+              onClick={handleRenameImage}
+              disabled={!newImageName.trim()}
+              className="bg-[#6B1D2A] hover:bg-[#8A2536]"
+            >
+              {language === 'de' ? 'Speichern' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

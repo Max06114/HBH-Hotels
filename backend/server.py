@@ -1189,6 +1189,20 @@ async def admin_delete_image(image_id: str, admin: dict = Depends(get_current_ad
         raise HTTPException(status_code=404, detail="Image not found")
     return {"message": "Image deleted"}
 
+class ImageRename(BaseModel):
+    custom_name: str
+
+@api_router.put("/admin/images/{image_id}/rename")
+async def admin_rename_image(image_id: str, data: ImageRename, admin: dict = Depends(get_current_admin)):
+    """Rename an image with a custom name."""
+    result = await db.images.update_one(
+        {"id": image_id, "is_deleted": False},
+        {"$set": {"custom_name": data.custom_name, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return {"message": "Image renamed", "custom_name": data.custom_name}
+
 @api_router.put("/admin/hotels/{hotel_id}/images")
 async def admin_update_hotel_images(
     hotel_id: str,
