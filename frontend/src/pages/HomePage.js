@@ -47,7 +47,7 @@ const HomePage = () => {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1763627516727-2ca3e324fa59?crop=entropy&cs=srgb&fm=jpg&w=1920&q=80"
+            src="https://customer-assets.emergentagent.com/job_event-payments-3/artifacts/afqf6ce3__FFW7497.jpg"
             alt="Orchestra"
             className="w-full h-full object-cover"
           />
