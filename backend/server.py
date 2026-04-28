@@ -664,44 +664,133 @@ async def download_invoice(booking_id: str):
 
 @api_router.post("/bookings/{booking_id}/cancel")
 async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admin)):
+    """Cancel a booking with automatic Stripe refund based on cancellation policy."""
     booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     
+    # Calculate refund percentage based on cancellation policy
+    check_in_date = datetime.strptime(booking['check_in'], '%Y-%m-%d').date()
+    today = datetime.now(timezone.utc).date()
+    days_until_arrival = (check_in_date - today).days
+    
+    # Cancellation policy:
+    # - More than 7 days before: 100% refund
+    # - 1-7 days before: 50% refund
+    # - Less than 1 day: 0% refund
+    if days_until_arrival > 7:
+        refund_percentage = 100
+    elif days_until_arrival >= 1:
+        refund_percentage = 50
+    else:
+        refund_percentage = 0
+    
+    refund_amount = 0
+    refund_status = "no_refund"
+    
+    # Process Stripe refund if payment was made
+    if booking.get('payment_status') in ['deposit_paid', 'fully_paid']:
+        # Find the payment transaction
+        transaction = await db.payment_transactions.find_one(
+            {"booking_id": booking_id, "status": "completed"},
+            {"_id": 0}
+        )
+        
+        if transaction and transaction.get('payment_intent_id') and refund_percentage > 0:
+            try:
+                import stripe
+                stripe.api_key = os.environ.get('STRIPE_API_KEY')
+                
+                # Calculate refund amount
+                paid_amount = transaction.get('amount', booking.get('deposit_amount', 0))
+                refund_amount = round(paid_amount * (refund_percentage / 100), 2)
+                
+                # Create refund in Stripe
+                refund = stripe.Refund.create(
+                    payment_intent=transaction['payment_intent_id'],
+                    amount=int(refund_amount * 100),  # Stripe uses cents
+                    reason='requested_by_customer'
+                )
+                
+                refund_status = "refunded" if refund.status == 'succeeded' else "refund_pending"
+                
+                # Log the refund
+                await db.refunds.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "booking_id": booking_id,
+                    "transaction_id": transaction.get('id'),
+                    "refund_id": refund.id,
+                    "amount": refund_amount,
+                    "percentage": refund_percentage,
+                    "status": refund.status,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+            except Exception as e:
+                logging.error(f"Stripe refund failed: {str(e)}")
+                refund_status = "refund_failed"
+    
     # Update booking status
     await db.bookings.update_one(
         {"id": booking_id},
-        {"$set": {"payment_status": "cancelled", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": {
+            "payment_status": "cancelled",
+            "refund_amount": refund_amount,
+            "refund_percentage": refund_percentage,
+            "refund_status": refund_status,
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
     )
     
-    # Send cancellation email
+    # Send cancellation email with refund info
     lang = booking.get("language", "de")
     if lang == "de":
+        refund_text = ""
+        if refund_amount > 0:
+            refund_text = f"<p>Erstattung: <strong>{refund_amount:.2f} €</strong> ({refund_percentage}% gemäß Stornobedingungen)</p>"
+        elif refund_percentage == 0:
+            refund_text = "<p>Gemäß unseren Stornobedingungen (weniger als 1 Tag vor Anreise) ist leider keine Erstattung möglich.</p>"
+        
         subject = f"Stornierungsbestätigung - {booking['booking_number']}"
         body = f"""
         <html><body>
         <h2>Stornierungsbestätigung</h2>
         <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-        <p>Ihre Buchung {booking['booking_number']} wurde storniert.</p>
-        <p>Eventuelle Erstattungen werden in Kürze bearbeitet.</p>
+        <p>Ihre Buchung <strong>{booking['booking_number']}</strong> wurde storniert.</p>
+        {refund_text}
+        <p>Die Erstattung wird innerhalb von 5-10 Werktagen auf Ihrem Konto gutgeschrieben.</p>
         <p>Mit freundlichen Grüßen,<br>Travel Events</p>
         </body></html>
         """
     else:
+        refund_text = ""
+        if refund_amount > 0:
+            refund_text = f"<p>Refund: <strong>{refund_amount:.2f} €</strong> ({refund_percentage}% according to cancellation policy)</p>"
+        elif refund_percentage == 0:
+            refund_text = "<p>According to our cancellation policy (less than 1 day before arrival), no refund is possible.</p>"
+        
         subject = f"Cancellation Confirmation - {booking['booking_number']}"
         body = f"""
         <html><body>
         <h2>Cancellation Confirmation</h2>
         <p>Dear {booking['salutation']} {booking['last_name']},</p>
-        <p>Your booking {booking['booking_number']} has been cancelled.</p>
-        <p>Any refunds will be processed shortly.</p>
+        <p>Your booking <strong>{booking['booking_number']}</strong> has been cancelled.</p>
+        {refund_text}
+        <p>The refund will be credited to your account within 5-10 business days.</p>
         <p>Best regards,<br>Travel Events</p>
         </body></html>
         """
     
     await send_email(booking['email'], subject, body)
     
-    return {"message": "Booking cancelled successfully", "booking_id": booking_id}
+    return {
+        "message": "Booking cancelled successfully", 
+        "booking_id": booking_id,
+        "refund_amount": refund_amount,
+        "refund_percentage": refund_percentage,
+        "refund_status": refund_status
+    }
 
 # ============== ADMIN AUTH ==============
 
