@@ -120,6 +120,11 @@ class Hotel(BaseModel):
     single_price: float
     double_price: float
     twin_price: Optional[float] = None
+    # Comfort room prices (optional - for hotels with multiple categories)
+    single_comfort_price: Optional[float] = None
+    double_comfort_price: Optional[float] = None
+    twin_comfort_price: Optional[float] = None
+    has_comfort_rooms: bool = False
     breakfast_included: bool = True
     tax_included: bool = True
     active: bool = True
@@ -828,9 +833,12 @@ async def export_bookings_csv(admin: dict = Depends(get_current_admin)):
     
     # Data rows
     room_type_labels = {
-        'single': 'Einzelzimmer',
-        'double': 'Doppelzimmer',
-        'twin': 'Zweibettzimmer'
+        'single': 'Einzelzimmer Standard',
+        'double': 'Doppelzimmer Standard',
+        'twin': 'Zweibettzimmer Standard',
+        'single_comfort': 'Einzelzimmer Comfort',
+        'double_comfort': 'Doppelzimmer Comfort',
+        'twin_comfort': 'Zweibettzimmer Comfort'
     }
     
     status_labels = {

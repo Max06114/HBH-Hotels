@@ -84,8 +84,28 @@ const BookingPage = () => {
     if (nights <= 0) return null;
 
     let pricePerNight = hotel.single_price;
-    if (formData.roomType === 'double') pricePerNight = hotel.double_price;
-    if (formData.roomType === 'twin') pricePerNight = hotel.twin_price || hotel.double_price;
+    switch (formData.roomType) {
+      case 'single':
+        pricePerNight = hotel.single_price;
+        break;
+      case 'double':
+        pricePerNight = hotel.double_price;
+        break;
+      case 'twin':
+        pricePerNight = hotel.twin_price || hotel.double_price;
+        break;
+      case 'single_comfort':
+        pricePerNight = hotel.single_comfort_price || hotel.single_price;
+        break;
+      case 'double_comfort':
+        pricePerNight = hotel.double_comfort_price || hotel.double_price;
+        break;
+      case 'twin_comfort':
+        pricePerNight = hotel.twin_comfort_price || hotel.twin_price || hotel.double_price;
+        break;
+      default:
+        pricePerNight = hotel.single_price;
+    }
 
     const total = pricePerNight * nights;
     const deposit = Math.round(total * 0.25 * 100) / 100;
@@ -211,10 +231,33 @@ const BookingPage = () => {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="single">{t('singleRoom')} - {formatPrice(hotel.single_price)} €</SelectItem>
-                            <SelectItem value="double">{t('doubleRoom')} - {formatPrice(hotel.double_price)} €</SelectItem>
+                            {/* Standard rooms */}
+                            <SelectItem value="single">
+                              {language === 'de' ? 'Einzelzimmer Standard' : 'Single Room Standard'} - {formatPrice(hotel.single_price)} €
+                            </SelectItem>
+                            <SelectItem value="double">
+                              {language === 'de' ? 'Doppelzimmer Standard' : 'Double Room Standard'} - {formatPrice(hotel.double_price)} €
+                            </SelectItem>
                             {hotel.twin_price && (
-                              <SelectItem value="twin">{t('twinRoom')} - {formatPrice(hotel.twin_price)} €</SelectItem>
+                              <SelectItem value="twin">
+                                {language === 'de' ? 'Zweibettzimmer Standard' : 'Twin Room Standard'} - {formatPrice(hotel.twin_price)} €
+                              </SelectItem>
+                            )}
+                            {/* Comfort rooms (if available) */}
+                            {hotel.has_comfort_rooms && hotel.single_comfort_price && (
+                              <SelectItem value="single_comfort">
+                                {language === 'de' ? 'Einzelzimmer Comfort' : 'Single Room Comfort'} - {formatPrice(hotel.single_comfort_price)} €
+                              </SelectItem>
+                            )}
+                            {hotel.has_comfort_rooms && hotel.double_comfort_price && (
+                              <SelectItem value="double_comfort">
+                                {language === 'de' ? 'Doppelzimmer Comfort' : 'Double Room Comfort'} - {formatPrice(hotel.double_comfort_price)} €
+                              </SelectItem>
+                            )}
+                            {hotel.has_comfort_rooms && hotel.twin_comfort_price && (
+                              <SelectItem value="twin_comfort">
+                                {language === 'de' ? 'Zweibettzimmer Comfort' : 'Twin Room Comfort'} - {formatPrice(hotel.twin_comfort_price)} €
+                              </SelectItem>
                             )}
                           </SelectContent>
                         </Select>
