@@ -10,7 +10,7 @@ const translations = {
     language: "Sprache",
     
     // Hero
-    heroTitle: "Happy Birthday Händel 2026",
+    heroTitle: "Happy Birthday Händel 2027",
     heroSubtitle: "Hotelübernachtungen für das Chorfestival in Halle",
     heroDescription: "Jedes Jahr feiern über 450 Sänger aus nah und fern Händels Geburtstag in seiner Heimatstadt Halle mit einer Aufführung des Oratoriums Messiah.",
     viewHotels: "Hotels ansehen",
@@ -101,7 +101,7 @@ const translations = {
     language: "Language",
     
     // Hero
-    heroTitle: "Happy Birthday Händel 2026",
+    heroTitle: "Happy Birthday Händel 2027",
     heroSubtitle: "Hotel Accommodations for the Choir Festival in Halle",
     heroDescription: "Every year, over 450 singers from near and far celebrate Händel's birthday in his hometown of Halle with a performance of the oratorio Messiah.",
     viewHotels: "View Hotels",
