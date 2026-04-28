@@ -180,6 +180,7 @@ const BookingsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -193,6 +194,32 @@ const BookingsManagement = () => {
       console.error('Error fetching bookings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const response = await axios.get(`${API}/admin/bookings/export`, {
+        headers: getAuthHeaders(),
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'buchungsuebersicht.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(language === 'de' ? 'CSV exportiert' : 'CSV exported');
+    } catch (error) {
+      toast.error(language === 'de' ? 'Export fehlgeschlagen' : 'Export failed');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -246,7 +273,21 @@ const BookingsManagement = () => {
 
   return (
     <div data-testid="admin-bookings">
-      <h1 className="font-serif text-3xl text-[#1A1A1A] mb-8">{t('adminBookings')}</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="font-serif text-3xl text-[#1A1A1A]">{t('adminBookings')}</h1>
+        <Button 
+          onClick={handleExportCSV}
+          disabled={exporting}
+          className="bg-[#2E7D32] hover:bg-[#1B5E20] text-white"
+        >
+          {exporting ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 mr-2" />
+          )}
+          {language === 'de' ? 'CSV Export' : 'Export CSV'}
+        </Button>
+      </div>
       
       <Card className="border-[#E5E0D5]">
         <CardContent className="p-0">

@@ -794,6 +794,79 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
 
 # ============== ADMIN AUTH ==============
 
+@api_router.get("/admin/bookings/export")
+async def export_bookings_csv(admin: dict = Depends(get_current_admin)):
+    """Export bookings as CSV file for hotel room overview."""
+    import csv
+    from io import StringIO
+    
+    # Get all non-cancelled bookings
+    bookings = await db.bookings.find(
+        {"payment_status": {"$ne": "cancelled"}},
+        {"_id": 0}
+    ).sort("check_in", 1).to_list(1000)
+    
+    # Create CSV
+    output = StringIO()
+    writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+    
+    # Header row
+    writer.writerow([
+        'Buchungsnummer',
+        'Hotel',
+        'Gast',
+        'E-Mail',
+        'Anreise',
+        'Abreise',
+        'Nächte',
+        'Zimmertyp',
+        'Preis/Nacht',
+        'Gesamtpreis',
+        'Zahlungsstatus',
+        'Nachricht'
+    ])
+    
+    # Data rows
+    room_type_labels = {
+        'single': 'Einzelzimmer',
+        'double': 'Doppelzimmer',
+        'twin': 'Zweibettzimmer'
+    }
+    
+    status_labels = {
+        'pending': 'Ausstehend',
+        'deposit_paid': 'Anzahlung bezahlt',
+        'fully_paid': 'Vollständig bezahlt'
+    }
+    
+    for booking in bookings:
+        writer.writerow([
+            booking.get('booking_number', ''),
+            booking.get('hotel_name', ''),
+            f"{booking.get('salutation', '')} {booking.get('first_name', '')} {booking.get('last_name', '')}".strip(),
+            booking.get('email', ''),
+            booking.get('check_in', ''),
+            booking.get('check_out', ''),
+            booking.get('nights', ''),
+            room_type_labels.get(booking.get('room_type', ''), booking.get('room_type', '')),
+            f"{booking.get('price_per_night', 0):.2f} €",
+            f"{booking.get('total_price', 0):.2f} €",
+            status_labels.get(booking.get('payment_status', ''), booking.get('payment_status', '')),
+            booking.get('notes', '')
+        ])
+    
+    csv_content = output.getvalue()
+    output.close()
+    
+    # Return as downloadable CSV file
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": "attachment; filename=buchungsuebersicht.csv"
+        }
+    )
+
 @api_router.post("/admin/login")
 async def admin_login(login_data: AdminLogin):
     admin = await db.admins.find_one({"email": login_data.email}, {"_id": 0})
