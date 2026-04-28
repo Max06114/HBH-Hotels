@@ -62,7 +62,7 @@ const HomePage = () => {
             className="max-w-3xl"
           >
             <span className="inline-block text-[#D4AF37] text-sm font-semibold tracking-[0.2em] uppercase mb-4">
-              25. - 27. Februar 2027 · Halle (Saale)
+              25. - 28. Februar 2027 · Halle (Saale)
             </span>
             
             <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-white font-bold mb-6 leading-tight">
@@ -219,7 +219,7 @@ const HomePage = () => {
               <h3 className="font-serif text-xl text-white mb-2">
                 {language === 'de' ? 'Datum' : 'Date'}
               </h3>
-              <p className="text-white/70">25. - 27. Februar 2027</p>
+              <p className="text-white/70">25. - 28. Februar 2027</p>
             </div>
             <div className="p-8">
               <MapPin className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
