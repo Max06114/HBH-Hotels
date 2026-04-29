@@ -53,6 +53,8 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [x] PayPal Order for remaining balance
 - [x] ConfirmationPage handles payment_type=remaining
 - [x] Booking status updates to "fully_paid" after remaining payment
+- [x] **Automated Scheduler**: Weekly cron job (Monday 9:00 UTC) for reminders
+- [x] **Admin Scheduler Page**: Manual trigger, status display, job history
 
 ## Current Architecture
 
@@ -109,13 +111,13 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [x] Restzahlung payment links in reminder emails
 - [x] Invoice download link in reminder emails
 - [x] Stripe + PayPal handling for remaining balance
+- [x] Automated weekly scheduler for payment reminders
 
 ### P2 - Medium Priority
 - [ ] End-to-End testing of full payment flow (deposit → reminder → remaining payment)
-- [ ] Automated reminder system (cron job for 7 weeks before arrival)
 
 ### P3 - Low Priority
-- [ ] Server.py refactoring (split into modules - currently >2000 lines)
+- [ ] Server.py refactoring (split into modules - currently >2200 lines)
 - [ ] AdminDashboard.js and BookingPage.js component splitting
 - [ ] Additional admin analytics
 

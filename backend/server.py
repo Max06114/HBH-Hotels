@@ -24,6 +24,9 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 import requests
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from contextlib import asynccontextmanager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -89,8 +92,91 @@ def get_object(path: str) -> tuple:
     resp.raise_for_status()
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
-# Create the main app
-app = FastAPI(title="Happy Birthday Händel - Hotel Booking")
+# ============== SCHEDULER ==============
+
+scheduler = AsyncIOScheduler()
+
+async def send_automated_reminders():
+    """
+    Automated job that runs weekly to send payment reminders.
+    Sends reminders to bookings where:
+    - payment_status is 'deposit_paid'
+    - check_in is approximately 7 weeks (49 days) away
+    - reminder has not been sent yet
+    """
+    logger.info("Running automated payment reminder job...")
+    
+    # Calculate date window: 6-7 weeks from now
+    seven_weeks_from_now = (datetime.now(timezone.utc) + timedelta(weeks=7)).strftime("%Y-%m-%d")
+    six_weeks_from_now = (datetime.now(timezone.utc) + timedelta(weeks=6)).strftime("%Y-%m-%d")
+    
+    # Find bookings that need reminders
+    bookings = await db.bookings.find({
+        "payment_status": "deposit_paid",
+        "check_in": {"$gte": six_weeks_from_now, "$lte": seven_weeks_from_now},
+        "reminder_sent": {"$ne": True}
+    }, {"_id": 0}).to_list(100)
+    
+    sent_count = 0
+    failed_count = 0
+    
+    for booking in bookings:
+        try:
+            success = await send_payment_reminder_with_link(booking)
+            if success:
+                await db.bookings.update_one(
+                    {"id": booking["id"]},
+                    {"$set": {
+                        "reminder_sent": True, 
+                        "reminder_sent_at": datetime.now(timezone.utc).isoformat(),
+                        "reminder_type": "automated"
+                    }}
+                )
+                sent_count += 1
+                logger.info(f"Sent automated reminder to {booking['email']} for booking {booking['booking_number']}")
+            else:
+                failed_count += 1
+                logger.error(f"Failed to send reminder to {booking['email']}")
+        except Exception as e:
+            failed_count += 1
+            logger.error(f"Error sending reminder to {booking['email']}: {str(e)}")
+    
+    logger.info(f"Automated reminder job completed: {sent_count} sent, {failed_count} failed, {len(bookings)} total eligible")
+    
+    # Store job run log
+    await db.scheduler_logs.insert_one({
+        "job_name": "send_automated_reminders",
+        "run_at": datetime.now(timezone.utc).isoformat(),
+        "bookings_processed": len(bookings),
+        "sent_count": sent_count,
+        "failed_count": failed_count
+    })
+    
+    return {"sent": sent_count, "failed": failed_count, "total": len(bookings)}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan - start scheduler on startup, shutdown on exit."""
+    # Startup
+    scheduler.add_job(
+        send_automated_reminders,
+        CronTrigger(day_of_week='mon', hour=9, minute=0),
+        id='weekly_payment_reminders',
+        name='Weekly Payment Reminders',
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("Scheduler started - Weekly payment reminders scheduled for Monday 9:00 AM UTC")
+    
+    yield
+    
+    # Shutdown
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("Scheduler shutdown complete")
+
+# Create the main app with lifespan
+app = FastAPI(title="Happy Birthday Händel - Hotel Booking", lifespan=lifespan)
 
 # Create routers
 api_router = APIRouter(prefix="/api")
@@ -1859,6 +1945,38 @@ async def admin_get_pending_reminders(admin: dict = Depends(get_current_admin)):
             pending.append(booking)
     
     return {"pending_reminders": pending, "count": len(pending)}
+
+# ============== SCHEDULER MANAGEMENT ==============
+
+@api_router.get("/admin/scheduler/status")
+async def get_scheduler_status(admin: dict = Depends(get_current_admin)):
+    """Get the current status of the scheduler and recent job runs."""
+    jobs = []
+    for job in scheduler.get_jobs():
+        jobs.append({
+            "id": job.id,
+            "name": job.name,
+            "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+            "trigger": str(job.trigger)
+        })
+    
+    # Get recent scheduler logs
+    recent_logs = await db.scheduler_logs.find({}, {"_id": 0}).sort("run_at", -1).limit(10).to_list(10)
+    
+    return {
+        "scheduler_running": scheduler.running,
+        "jobs": jobs,
+        "recent_runs": recent_logs
+    }
+
+@api_router.post("/admin/scheduler/run-reminders")
+async def run_reminders_manually(admin: dict = Depends(get_current_admin)):
+    """Manually trigger the payment reminder job."""
+    result = await send_automated_reminders()
+    return {
+        "message": "Reminder job executed manually",
+        "result": result
+    }
 
 # ============== SEED DATA ==============
 
