@@ -1239,6 +1239,242 @@ async def admin_get_stats(admin: dict = Depends(get_current_admin)):
 
 # ============== PAYMENT REMINDERS ==============
 
+@api_router.post("/payments/remaining/{booking_id}")
+async def create_remaining_payment_link(booking_id: str):
+    """Create a payment link for the remaining balance."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    if booking.get("payment_status") == "fully_paid":
+        raise HTTPException(status_code=400, detail="Booking already fully paid")
+    
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    
+    # Determine original payment method
+    payment_method = booking.get("payment_method", "stripe")
+    base_url = os.environ.get("FRONTEND_URL", "https://event-payments-3.preview.emergentagent.com")
+    
+    if payment_method == "paypal":
+        # Create PayPal order for remaining amount
+        import httpx
+        client_id = os.environ.get('PAYPAL_CLIENT_ID')
+        client_secret = os.environ.get('PAYPAL_SECRET')
+        
+        async with httpx.AsyncClient() as client:
+            auth_response = await client.post(
+                "https://api-m.paypal.com/v1/oauth2/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                auth=(client_id, client_secret),
+                data={"grant_type": "client_credentials"}
+            )
+            access_token = auth_response.json()["access_token"]
+            
+            order_response = await client.post(
+                "https://api-m.paypal.com/v2/checkout/orders",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {access_token}"
+                },
+                json={
+                    "intent": "CAPTURE",
+                    "purchase_units": [{
+                        "reference_id": booking["id"],
+                        "description": f"Restzahlung: {hotel['name']} - {booking['booking_number']}",
+                        "amount": {
+                            "currency_code": "EUR",
+                            "value": str(booking["remaining_amount"])
+                        }
+                    }],
+                    "application_context": {
+                        "return_url": f"{base_url}/confirmation?booking_id={booking_id}&payment_type=remaining&method=paypal",
+                        "cancel_url": f"{base_url}/"
+                    }
+                }
+            )
+            order = order_response.json()
+            
+            # Get approval URL
+            approval_url = next((link["href"] for link in order.get("links", []) if link["rel"] == "approve"), None)
+            
+            await db.bookings.update_one(
+                {"id": booking_id},
+                {"$set": {"paypal_remaining_order_id": order["id"]}}
+            )
+            
+            return {"payment_url": approval_url, "method": "paypal"}
+    else:
+        # Create Stripe checkout session for remaining amount
+        import stripe
+        stripe.api_key = os.environ.get('STRIPE_API_KEY')
+        
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'eur',
+                    'unit_amount': int(booking["remaining_amount"] * 100),
+                    'product_data': {
+                        'name': f'Restzahlung: {hotel["name"]}',
+                        'description': f'Buchung {booking["booking_number"]} - Restbetrag'
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f'{base_url}/confirmation?session_id={{CHECKOUT_SESSION_ID}}&booking_id={booking_id}&payment_type=remaining',
+            cancel_url=f'{base_url}/',
+            customer_email=booking["email"],
+            metadata={
+                'booking_id': booking_id,
+                'payment_type': 'remaining'
+            }
+        )
+        
+        await db.bookings.update_one(
+            {"id": booking_id},
+            {"$set": {"stripe_remaining_session_id": session.id}}
+        )
+        
+        return {"payment_url": session.url, "method": "stripe"}
+
+async def send_payment_reminder_with_link(booking: dict):
+    """Send payment reminder email with payment link for remaining balance."""
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        return False
+    
+    # Generate payment link
+    base_url = os.environ.get("FRONTEND_URL", "https://event-payments-3.preview.emergentagent.com")
+    payment_link = f"{base_url}/pay-remaining/{booking['id']}"
+    invoice_link = f"{base_url}/api/invoices/{booking['id']}/download"
+    
+    # Format remaining amount with comma (German format)
+    remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
+    
+    lang = booking.get("language", "de")
+    if lang == "de":
+        subject = f"Zahlungserinnerung - Restzahlung für Ihre Hotelbuchung"
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; line-height: 1.8; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #FDFBF7;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: #6B1D2A; margin: 0;">Zahlungserinnerung</h2>
+            </div>
+            
+            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+            
+            <p>in einer Woche ist die Restzahlung für Ihre Hotelbuchung im <strong>{hotel['name']}</strong> fällig.</p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background: white;">
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Buchungsnummer:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{hotel['name']}</td>
+                </tr>
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Anreise:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Abreise:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
+                </tr>
+                <tr style="background: #6B1D2A; color: white;">
+                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>Restbetrag:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>{remaining_formatted} €</strong></td>
+                </tr>
+            </table>
+            
+            <p>Bitte benutzen Sie diesen Zahlungslink dafür:</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{payment_link}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-weight: bold;">Jetzt bezahlen</a>
+            </div>
+            
+            <p style="font-size: 14px; color: #666;">
+                <a href="{invoice_link}" style="color: #6B1D2A;">📄 Rechnung herunterladen</a>
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
+            
+            <p>Mit freundlichen Grüßen,</p>
+            <p><strong>Max von Arnim</strong><br>Travel Events</p>
+            
+            <p style="font-size: 12px; color: #999; margin-top: 30px;">
+                Bei Fragen erreichen Sie uns unter info@travel-events.de
+            </p>
+        </div>
+        </body></html>
+        """
+    else:
+        subject = f"Payment Reminder - Remaining Balance for Your Hotel Booking"
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; line-height: 1.8; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #FDFBF7;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="color: #6B1D2A; margin: 0;">Payment Reminder</h2>
+            </div>
+            
+            <p>Dear {booking['salutation']} {booking['last_name']},</p>
+            
+            <p>The remaining payment for your hotel booking at <strong>{hotel['name']}</strong> is due in one week.</p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background: white;">
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Booking Number:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{hotel['name']}</td>
+                </tr>
+                <tr style="background: #F5F2EA;">
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Check-in:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Check-out:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
+                </tr>
+                <tr style="background: #6B1D2A; color: white;">
+                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>Remaining Amount:</strong></td>
+                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>€{booking['remaining_amount']:.2f}</strong></td>
+                </tr>
+            </table>
+            
+            <p>Please use this payment link:</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{payment_link}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-weight: bold;">Pay Now</a>
+            </div>
+            
+            <p style="font-size: 14px; color: #666;">
+                <a href="{invoice_link}" style="color: #6B1D2A;">📄 Download Invoice</a>
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
+            
+            <p>Best regards,</p>
+            <p><strong>Max von Arnim</strong><br>Travel Events</p>
+            
+            <p style="font-size: 12px; color: #999; margin-top: 30px;">
+                For questions, please contact us at info@travel-events.de
+            </p>
+        </div>
+        </body></html>
+        """
+    
+    try:
+        await send_email(booking['email'], subject, body)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to send payment reminder: {str(e)}")
+        return False
+
 async def send_payment_reminder(booking: dict):
     """Send payment reminder email for remaining balance"""
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
