@@ -1,8 +1,8 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Globe, Menu, X, Music } from 'lucide-react';
+import { Globe, Menu, X, Music, Map } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState } from 'react';
 
@@ -10,6 +10,7 @@ const Header = () => {
   const { language, toggleLanguage, t } = useLanguage();
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -17,12 +18,40 @@ const Header = () => {
     navigate('/');
   };
 
+  const scrollToSection = (sectionId) => {
+    setMobileMenuOpen(false);
+    
+    // If not on homepage, navigate first then scroll
+    if (location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        const element = document.getElementById(sectionId);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    } else {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
+
+  const scrollToTop = () => {
+    setMobileMenuOpen(false);
+    if (location.pathname !== '/') {
+      navigate('/');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <header className="glass-header fixed top-0 left-0 right-0 z-50" data-testid="header">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3" data-testid="logo-link">
+          <Link to="/" className="flex items-center gap-3" data-testid="logo-link" onClick={scrollToTop}>
             <div className="w-10 h-10 bg-[#6B1D2A] rounded-full flex items-center justify-center">
               <Music className="w-5 h-5 text-white" />
             </div>
@@ -34,12 +63,28 @@ const Header = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link to="/" className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" data-testid="nav-home">
+            <button 
+              onClick={scrollToTop} 
+              className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" 
+              data-testid="nav-home"
+            >
               {t('home')}
-            </Link>
-            <Link to="/#hotels" className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" data-testid="nav-hotels">
+            </button>
+            <button 
+              onClick={() => scrollToSection('hotels')} 
+              className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" 
+              data-testid="nav-hotels"
+            >
               {t('hotels')}
-            </Link>
+            </button>
+            <button 
+              onClick={() => scrollToSection('map')} 
+              className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium flex items-center gap-1" 
+              data-testid="nav-map"
+            >
+              <Map className="w-4 h-4" />
+              {language === 'de' ? 'Karte' : 'Map'}
+            </button>
             {isAuthenticated && (
               <Link to="/admin" className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" data-testid="nav-admin">
                 {t('admin')}
@@ -91,12 +136,16 @@ const Header = () => {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-[#E5E0D5]" data-testid="mobile-menu">
             <nav className="flex flex-col gap-4">
-              <Link to="/" className="text-[#1A1A1A] hover:text-[#6B1D2A] font-medium" onClick={() => setMobileMenuOpen(false)}>
+              <button onClick={scrollToTop} className="text-left text-[#1A1A1A] hover:text-[#6B1D2A] font-medium">
                 {t('home')}
-              </Link>
-              <Link to="/#hotels" className="text-[#1A1A1A] hover:text-[#6B1D2A] font-medium" onClick={() => setMobileMenuOpen(false)}>
+              </button>
+              <button onClick={() => scrollToSection('hotels')} className="text-left text-[#1A1A1A] hover:text-[#6B1D2A] font-medium">
                 {t('hotels')}
-              </Link>
+              </button>
+              <button onClick={() => scrollToSection('map')} className="text-left text-[#1A1A1A] hover:text-[#6B1D2A] font-medium flex items-center gap-1">
+                <Map className="w-4 h-4" />
+                {language === 'de' ? 'Karte' : 'Map'}
+              </button>
               {isAuthenticated ? (
                 <>
                   <Link to="/admin" className="text-[#1A1A1A] hover:text-[#6B1D2A] font-medium" onClick={() => setMobileMenuOpen(false)}>
