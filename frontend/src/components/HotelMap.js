@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -12,120 +12,101 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-// Custom icons
-const createIcon = (color, emoji) => {
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="
-      background-color: ${color};
-      width: 36px;
-      height: 36px;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      border: 2px solid white;
-    "><span style="transform: rotate(45deg); font-size: 16px;">${emoji}</span></div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 36],
-    popupAnchor: [0, -36],
-  });
+// Custom icon factory
+const createIcon = (color, emoji) => L.divIcon({
+  className: 'custom-marker',
+  html: `<div style="
+    background-color: ${color};
+    width: 36px;
+    height: 36px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border: 2px solid white;
+  "><span style="transform: rotate(45deg); font-size: 16px;">${emoji}</span></div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36],
+});
+
+// Pre-created icons
+const ICONS = {
+  hotel: createIcon('#6B1D2A', '🏨'),
+  venue: createIcon('#D4AF37', '🎵'),
+  train: createIcon('#1A1A1A', '🚂'),
 };
 
-const hotelIcon = createIcon('#6B1D2A', '🏨');
-const venueIcon = createIcon('#D4AF37', '🎵');
-const trainIcon = createIcon('#1A1A1A', '🚂');
-const churchIcon = createIcon('#4A4A4A', '⛪');
-const monumentIcon = createIcon('#8B4513', '🎭');
+// Map configuration
+const MAP_CENTER = [51.4810, 11.9730];
+const HOTEL_COORDS = {
+  'b&b': [51.4817, 11.9656],
+  'ankerhof': [51.4824, 11.9621],
+  'dorint': [51.4799, 11.9811],
+};
+
+// Get hotel position by name matching
+const getHotelPosition = (hotelName) => {
+  const name = hotelName.toLowerCase();
+  if (name.includes('b&b') || name.includes('b & b') || name.includes('bb hotel')) return HOTEL_COORDS['b&b'];
+  if (name.includes('ankerhof')) return HOTEL_COORDS.ankerhof;
+  if (name.includes('dorint') || name.includes('charlottenhof')) return HOTEL_COORDS.dorint;
+  return MAP_CENTER;
+};
 
 const HotelMap = ({ hotels = [] }) => {
   const { language } = useLanguage();
+  const isDE = language === 'de';
 
-  // Halle (Saale) center - balanced to show all POIs
-  const center = [51.4810, 11.9730];
-
-  // Points of interest with verified coordinates
-  const landmarks = [
+  // Memoize landmarks to prevent recreation on each render
+  const landmarks = useMemo(() => [
     {
       id: 'haendelhalle',
-      name: language === 'de' ? 'Händelhalle (Veranstaltungsort)' : 'Händelhalle (Venue)',
-      position: [51.4817, 11.9643], // Salzgrafenplatz 1 - verified OpenStreetMap
-      icon: venueIcon,
-      description: language === 'de' 
-        ? 'Konzerthaus und Veranstaltungsort für Happy Birthday Händel'
-        : 'Concert hall and venue for Happy Birthday Händel'
+      name: isDE ? 'Händelhalle (Veranstaltungsort)' : 'Händelhalle (Venue)',
+      position: [51.4817, 11.9643],
+      icon: ICONS.venue,
+      description: isDE ? 'Konzerthaus und Veranstaltungsort für Happy Birthday Händel' : 'Concert hall and venue for Happy Birthday Händel'
     },
     {
       id: 'haendeldenkmal',
-      name: language === 'de' ? 'Händeldenkmal' : 'Händel Monument',
-      position: [51.4826, 11.9703], // Marktplatz - exact OpenStreetMap coordinates
-      icon: venueIcon,
-      description: language === 'de'
-        ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz (1859)'
-        : 'Bronze statue of George Frideric Handel on the market square (1859)'
+      name: isDE ? 'Händeldenkmal' : 'Händel Monument',
+      position: [51.4826, 11.9703],
+      icon: ICONS.venue,
+      description: isDE ? 'Bronzestandbild von Georg Friedrich Händel auf dem Marktplatz (1859)' : 'Bronze statue of George Frideric Handel on the market square (1859)'
     },
     {
       id: 'bahnhof',
-      name: language === 'de' ? 'Hauptbahnhof Halle' : 'Halle Main Station',
-      position: [51.4781, 11.9867], // Verified coordinates
-      icon: trainIcon,
-      description: language === 'de'
-        ? 'ICE-Bahnhof mit Verbindungen nach Berlin, Leipzig, Frankfurt'
-        : 'ICE station with connections to Berlin, Leipzig, Frankfurt'
+      name: isDE ? 'Hauptbahnhof Halle' : 'Halle Main Station',
+      position: [51.4781, 11.9867],
+      icon: ICONS.train,
+      description: isDE ? 'ICE-Bahnhof mit Verbindungen nach Berlin, Leipzig, Frankfurt' : 'ICE station with connections to Berlin, Leipzig, Frankfurt'
     },
     {
       id: 'marktkirche',
-      name: language === 'de' ? 'Marktkirche Unser Lieben Frauen' : 'Market Church',
-      position: [51.4826, 11.9681], // Verified - Marktplatz
-      icon: venueIcon,
-      description: language === 'de'
-        ? 'Historische Kirche, in der Händel getauft wurde'
-        : 'Historic church where Händel was baptized'
+      name: isDE ? 'Marktkirche Unser Lieben Frauen' : 'Market Church',
+      position: [51.4826, 11.9681],
+      icon: ICONS.venue,
+      description: isDE ? 'Historische Kirche, in der Händel getauft wurde' : 'Historic church where Händel was baptized'
     }
-  ];
-
-  // Hotel coordinates - verified from search results and OpenStreetMap
-  const hotelCoordinates = {
-    'b&b': [51.4817, 11.9656],      // Hallorenring 9 - near Händelhalle
-    'bb': [51.4817, 11.9656],       // Alternative match
-    'ankerhof': [51.4824, 11.9621], // Ankerstraße 2a - on Saale river
-    'dorint': [51.4799, 11.9811]    // Dorotheenstraße 12 - verified GPS
-  };
-
-  const getHotelPosition = (hotel) => {
-    const name = hotel.name.toLowerCase();
-    if (name.includes('b&b') || name.includes('b & b') || name.includes('bb hotel')) return hotelCoordinates['b&b'];
-    if (name.includes('ankerhof')) return hotelCoordinates.ankerhof;
-    if (name.includes('dorint') || name.includes('charlottenhof')) return hotelCoordinates.dorint;
-    return center;
-  };
+  ], [isDE]);
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-[#E5E0D5] shadow-lg" data-testid="hotel-map">
-      <MapContainer 
-        center={center} 
-        zoom={15} 
-        style={{ height: '500px', width: '100%' }}
-        scrollWheelZoom={false}
-      >
+      <MapContainer center={MAP_CENTER} zoom={15} style={{ height: '500px', width: '100%' }} scrollWheelZoom={false}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         {/* Landmarks */}
-        {landmarks.map((landmark) => (
-          <Marker 
-            key={landmark.id} 
-            position={landmark.position} 
-            icon={landmark.icon}
-          >
+        {landmarks.map(({ id, position, icon, name, description }) => (
+          <Marker key={id} position={position} icon={icon}>
             <Popup>
               <div className="font-sans">
-                <h3 className="font-semibold text-[#1A1A1A] mb-1">{landmark.name}</h3>
-                <p className="text-sm text-[#4A4A4A]">{landmark.description}</p>
+                <h3 className="font-semibold text-[#1A1A1A] mb-1">{name}</h3>
+                <p className="text-sm text-[#4A4A4A]">{description}</p>
               </div>
             </Popup>
           </Marker>
@@ -133,27 +114,15 @@ const HotelMap = ({ hotels = [] }) => {
 
         {/* Hotels */}
         {hotels.map((hotel) => (
-          <Marker 
-            key={hotel.id} 
-            position={getHotelPosition(hotel)} 
-            icon={hotelIcon}
-          >
+          <Marker key={hotel.id} position={getHotelPosition(hotel.name)} icon={ICONS.hotel}>
             <Popup>
               <div className="font-sans min-w-[200px]">
-                <h3 className="font-semibold text-[#6B1D2A] mb-1">
-                  {language === 'en' ? hotel.name_en : hotel.name}
-                </h3>
+                <h3 className="font-semibold text-[#6B1D2A] mb-1">{isDE ? hotel.name : hotel.name_en}</h3>
                 <p className="text-xs text-[#4A4A4A] mb-2">{hotel.address}</p>
-                <p className="text-sm mb-2">
-                  {language === 'en' ? hotel.distance_to_venue_en : hotel.distance_to_venue}
-                </p>
+                <p className="text-sm mb-2">{isDE ? hotel.distance_to_venue : hotel.distance_to_venue_en}</p>
                 <div className="flex gap-2 text-xs">
-                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">
-                    EZ: {hotel.single_price}€
-                  </span>
-                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">
-                    DZ: {hotel.double_price}€
-                  </span>
+                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">EZ: {hotel.single_price}€</span>
+                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">DZ: {hotel.double_price}€</span>
                 </div>
               </div>
             </Popup>
@@ -163,21 +132,19 @@ const HotelMap = ({ hotels = [] }) => {
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg p-4 shadow-lg z-[1000]">
-        <h4 className="font-semibold text-sm mb-3 text-[#1A1A1A]">
-          {language === 'de' ? 'Legende' : 'Legend'}
-        </h4>
+        <h4 className="font-semibold text-sm mb-3 text-[#1A1A1A]">{isDE ? 'Legende' : 'Legend'}</h4>
         <div className="space-y-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#6B1D2A] rounded-full"></span>
-            <span>{language === 'de' ? 'Hotels' : 'Hotels'}</span>
+            <span>Hotels</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#D4AF37] rounded-full"></span>
-            <span>{language === 'de' ? 'Happy-Birthday-Händel-Locations' : 'Happy Birthday Händel Locations'}</span>
+            <span>{isDE ? 'Happy-Birthday-Händel-Locations' : 'Happy Birthday Händel Locations'}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 bg-[#1A1A1A] rounded-full"></span>
-            <span>{language === 'de' ? 'Bahnhof' : 'Train Station'}</span>
+            <span>{isDE ? 'Bahnhof' : 'Train Station'}</span>
           </div>
         </div>
       </div>

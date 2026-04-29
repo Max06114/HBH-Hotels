@@ -65,6 +65,13 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [x] **Code Review Fixes**: sessionStorage, useCallback hooks, array keys
 - [x] **Email Service Module**: `/app/backend/services/__init__.py` with reusable templates
 
+### Phase 6 - Code Refactoring (DONE - April 29, 2026)
+- [x] **Backend Models Module**: `/app/backend/models/__init__.py` (170 lines)
+- [x] **Backend Services Module**: `/app/backend/services/__init__.py` (368 lines)
+- [x] **server.py reduced**: From ~2200 to ~1854 lines
+- [x] **HotelMap.js optimized**: From 189 to 155 lines (useMemo, constants extraction)
+- [x] **Admin utils created**: `/app/frontend/src/components/admin/utils.js`
+
 ## Current Architecture
 
 ```
@@ -121,14 +128,16 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [x] Invoice download link in reminder emails
 - [x] Stripe + PayPal handling for remaining balance
 - [x] Automated weekly scheduler for payment reminders
+- [x] Professional bilingual email templates
+- [x] Backend/Frontend code refactoring
 
 ### P2 - Medium Priority
 - [ ] End-to-End testing of full payment flow (deposit → reminder → remaining payment)
+- [ ] Further AdminDashboard.js component splitting (if needed)
 
 ### P3 - Low Priority
-- [ ] Server.py refactoring (split into modules - currently >2200 lines)
-- [ ] AdminDashboard.js and BookingPage.js component splitting
-- [ ] Additional admin analytics
+- [ ] Additional admin analytics/charts
+- [ ] Further BookingPage.js refactoring
 
 ## Credentials (Test)
 - Admin: info@travel-events.de / admin123
