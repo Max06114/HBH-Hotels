@@ -215,35 +215,6 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Event Info */}
-      <section className="py-20 bg-[#1A1A1A]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div className="p-8">
-              <Calendar className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
-              <h3 className="font-serif text-xl text-white mb-2">
-                {language === 'de' ? 'Datum' : 'Date'}
-              </h3>
-              <p className="text-white/70">25. - 28. Februar 2027</p>
-            </div>
-            <div className="p-8">
-              <MapPin className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
-              <h3 className="font-serif text-xl text-white mb-2">
-                {language === 'de' ? 'Veranstaltungsort' : 'Venue'}
-              </h3>
-              <p className="text-white/70">Händelhalle, Halle (Saale)</p>
-            </div>
-            <div className="p-8">
-              <Music className="w-12 h-12 text-[#D4AF37] mx-auto mb-4" />
-              <h3 className="font-serif text-xl text-white mb-2">
-                {language === 'de' ? 'Programm' : 'Program'}
-              </h3>
-              <p className="text-white/70">G.F. Händel - Messiah</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <Footer />
     </div>
   );
