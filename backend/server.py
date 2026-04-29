@@ -252,17 +252,18 @@ async def generate_invoice_number() -> str:
 
 def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> bytes:
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=1.5*cm, rightMargin=1.5*cm, topMargin=1.5*cm, bottomMargin=1.5*cm)
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20, textColor=colors.HexColor('#6B1D2A'))
-    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, spaceAfter=6)
-    bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=10, spaceAfter=6, fontName='Helvetica-Bold')
-    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=9, spaceAfter=4)
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, spaceAfter=10, textColor=colors.HexColor('#6B1D2A'))
+    header_style = ParagraphStyle('Header', parent=styles['Normal'], fontSize=11, spaceAfter=2, fontName='Helvetica-Bold')
+    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=9, spaceAfter=3)
+    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8, spaceAfter=2)
+    bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=9, spaceAfter=3, fontName='Helvetica-Bold')
     
     elements = []
     
-    # Header
+    # Translations
     texts = {
         "de": {
             "invoice": "RECHNUNG",
@@ -286,9 +287,9 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
             "single_comfort": "Einzelzimmer Komfort",
             "double_comfort": "Doppelzimmer Komfort",
             "twin_comfort": "Zweibettzimmer Komfort",
-            "payment_info": "Zahlungsinformationen",
             "thank_you": "Vielen Dank für Ihre Buchung!",
-            "bank_details": "Bankverbindung"
+            "margin_tax": "Besteuerung nach Margensteuer",
+            "bank_label": "Bankverbindung / Banking Details:"
         },
         "en": {
             "invoice": "INVOICE",
@@ -312,9 +313,9 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
             "single_comfort": "Single Room Comfort",
             "double_comfort": "Double Room Comfort",
             "twin_comfort": "Twin Room Comfort",
-            "payment_info": "Payment Information",
             "thank_you": "Thank you for your booking!",
-            "bank_details": "Banking Details"
+            "margin_tax": "Taxation according to margin scheme",
+            "bank_label": "Banking Details / Bankverbindung:"
         }
     }
     t = texts.get(language, texts["de"])
@@ -323,34 +324,29 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
         "single_comfort": t["single_comfort"], "double_comfort": t["double_comfort"], "twin_comfort": t["twin_comfort"]
     }
     
-    # Company Header (From)
-    elements.append(Paragraph("<b>Travel Events</b>", bold_style))
-    elements.append(Paragraph("M. A. von Arnim", small_style))
-    elements.append(Paragraph("Schleiermacherstr. 1", small_style))
-    elements.append(Paragraph("06114 Halle", small_style))
-    elements.append(Spacer(1, 20))
+    # Company Header (From) - compact
+    elements.append(Paragraph("<b>Travel Events</b>", header_style))
+    elements.append(Paragraph("M. A. von Arnim · Schleiermacherstr. 1 · 06114 Halle", small_style))
+    elements.append(Spacer(1, 12))
     
+    # Invoice Title
     elements.append(Paragraph(t["invoice"], title_style))
+    
+    # Invoice details - compact inline
+    invoice_info = f"<b>{t['invoice_nr']}:</b> {booking.get('invoice_number', 'N/A')} | <b>{t['booking_nr']}:</b> {booking['booking_number']} | <b>{t['date']}:</b> {datetime.now().strftime('%d.%m.%Y')}"
+    elements.append(Paragraph(invoice_info, small_style))
     elements.append(Spacer(1, 10))
     
-    # Invoice details
-    elements.append(Paragraph(f"<b>{t['invoice_nr']}:</b> {booking.get('invoice_number', 'N/A')}", normal_style))
-    elements.append(Paragraph(f"<b>{t['booking_nr']}:</b> {booking['booking_number']}", normal_style))
-    elements.append(Paragraph(f"<b>{t['date']}:</b> {datetime.now().strftime('%d.%m.%Y')}", normal_style))
-    elements.append(Spacer(1, 15))
+    # Guest - compact
+    elements.append(Paragraph(f"<b>{t['guest']}:</b> {booking['salutation']} {booking['first_name']} {booking['last_name']}", normal_style))
+    elements.append(Paragraph(f"{booking['street']}, {booking['postal_code']} {booking['city']}, {booking['country']}", small_style))
+    elements.append(Paragraph(f"{booking['email']}", small_style))
+    elements.append(Spacer(1, 12))
     
-    # Guest
-    elements.append(Paragraph(f"<b>{t['guest']}:</b>", bold_style))
-    elements.append(Paragraph(f"{booking['salutation']} {booking['first_name']} {booking['last_name']}", normal_style))
-    elements.append(Paragraph(f"{booking['street']}", normal_style))
-    elements.append(Paragraph(f"{booking['postal_code']} {booking['city']}", normal_style))
-    elements.append(Paragraph(f"{booking['country']}", normal_style))
-    elements.append(Paragraph(f"{booking['email']}", normal_style))
-    elements.append(Spacer(1, 15))
-    
-    # Booking details table
+    # Booking details table - compact
     hotel_name = hotel.get('name_en', hotel['name']) if language == 'en' else hotel['name']
     room_type_display = booking.get('room_type_display', room_types.get(booking['room_type'], booking['room_type']))
+    
     data = [
         [t['hotel'], hotel_name],
         [t['room_type'], room_type_display],
@@ -364,32 +360,33 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
         [t['remaining'], f"{booking['remaining_amount']:.2f} €"],
     ]
     
-    table = Table(data, colWidths=[6*cm, 8*cm])
+    table = Table(data, colWidths=[5*cm, 9*cm])
     table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('FONTNAME', (0, 7), (-1, -1), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0, 7), (-1, -1), colors.HexColor('#6B1D2A')),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('LINEBELOW', (0, 6), (-1, 6), 1, colors.HexColor('#E5E0D5')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('LINEBELOW', (0, 6), (-1, 6), 0.5, colors.HexColor('#E5E0D5')),
     ]))
     elements.append(table)
+    elements.append(Spacer(1, 8))
+    
+    # Tax info and breakfast
+    elements.append(Paragraph(f"<i>{t['incl_breakfast']}</i>", small_style))
+    elements.append(Paragraph(f"<i>{t['margin_tax']}</i>", small_style))
     elements.append(Spacer(1, 15))
     
-    elements.append(Paragraph(f"<i>{t['incl_breakfast']}</i>", normal_style))
-    elements.append(Spacer(1, 30))
+    # Thank you
     elements.append(Paragraph(t['thank_you'], bold_style))
     
     # Footer with Bank Details
-    elements.append(Spacer(1, 40))
-    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'))
-    footer_bold = ParagraphStyle('FooterBold', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'), fontName='Helvetica-Bold')
+    elements.append(Spacer(1, 25))
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.HexColor('#4A4A4A'), leading=10)
     
-    bank_label = "Bankverbindung / Banking Details:" if language == "de" else "Banking Details / Bankverbindung:"
-    elements.append(Paragraph(f"<b>{bank_label}</b>", footer_bold))
-    elements.append(Paragraph("N26 Bank, IBAN: DE77100110012713041577, BIC (Swift): NTSBDEB1XXX", footer_style))
-    elements.append(Spacer(1, 5))
+    elements.append(Paragraph(f"<b>{t['bank_label']}</b>", footer_style))
+    elements.append(Paragraph("N26 Bank · IBAN: DE77100110012713041577 · BIC (Swift): NTSBDEB1XXX", footer_style))
     elements.append(Paragraph("Steuernummer: 110/202/40794 · Ust.Id Nr. / VAT ID No.: DE 229 059 172", footer_style))
     
     doc.build(elements)
@@ -869,7 +866,8 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
 # ============== INVOICE DOWNLOAD ==============
 
 @api_router.get("/bookings/{booking_id}/invoice")
-async def download_invoice(booking_id: str):
+async def download_invoice(booking_id: str, lang: str = None):
+    """Download invoice PDF. Optional lang parameter: 'de' or 'en'"""
     booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -878,7 +876,9 @@ async def download_invoice(booking_id: str):
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
     
-    pdf = generate_invoice_pdf(booking, hotel, booking.get("language", "de"))
+    # Use provided lang parameter or fall back to booking language
+    language = lang if lang in ['de', 'en'] else booking.get("language", "de")
+    pdf = generate_invoice_pdf(booking, hotel, language)
     
     return Response(
         content=pdf,
