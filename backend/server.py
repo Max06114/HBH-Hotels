@@ -1507,7 +1507,7 @@ async def create_remaining_payment_link(booking_id: str):
                         }
                     }],
                     "application_context": {
-                        "return_url": f"{base_url}/confirmation?booking_id={booking_id}&payment_type=remaining&method=paypal",
+                        "return_url": f"{base_url}/booking/confirmation?booking_id={booking_id}&payment_type=remaining&method=paypal",
                         "cancel_url": f"{base_url}/"
                     }
                 }
@@ -1542,7 +1542,7 @@ async def create_remaining_payment_link(booking_id: str):
                 'quantity': 1,
             }],
             mode='payment',
-            success_url=f'{base_url}/confirmation?session_id={{CHECKOUT_SESSION_ID}}&booking_id={booking_id}&payment_type=remaining',
+            success_url=f'{base_url}/booking/confirmation?session_id={{CHECKOUT_SESSION_ID}}&booking_id={booking_id}&payment_type=remaining',
             cancel_url=f'{base_url}/',
             customer_email=booking["email"],
             metadata={
