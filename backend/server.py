@@ -258,6 +258,7 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20, textColor=colors.HexColor('#6B1D2A'))
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, spaceAfter=6)
     bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=10, spaceAfter=6, fontName='Helvetica-Bold')
+    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=9, spaceAfter=4)
     
     elements = []
     
@@ -282,8 +283,12 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
             "single": "Einzelzimmer",
             "double": "Doppelzimmer",
             "twin": "Zweibettzimmer",
+            "single_comfort": "Einzelzimmer Komfort",
+            "double_comfort": "Doppelzimmer Komfort",
+            "twin_comfort": "Zweibettzimmer Komfort",
             "payment_info": "Zahlungsinformationen",
-            "thank_you": "Vielen Dank für Ihre Buchung!"
+            "thank_you": "Vielen Dank für Ihre Buchung!",
+            "bank_details": "Bankverbindung"
         },
         "en": {
             "invoice": "INVOICE",
@@ -304,15 +309,25 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
             "single": "Single Room",
             "double": "Double Room",
             "twin": "Twin Room",
+            "single_comfort": "Single Room Comfort",
+            "double_comfort": "Double Room Comfort",
+            "twin_comfort": "Twin Room Comfort",
             "payment_info": "Payment Information",
-            "thank_you": "Thank you for your booking!"
+            "thank_you": "Thank you for your booking!",
+            "bank_details": "Banking Details"
         }
     }
     t = texts.get(language, texts["de"])
-    room_types = {"single": t["single"], "double": t["double"], "twin": t["twin"]}
+    room_types = {
+        "single": t["single"], "double": t["double"], "twin": t["twin"],
+        "single_comfort": t["single_comfort"], "double_comfort": t["double_comfort"], "twin_comfort": t["twin_comfort"]
+    }
     
-    elements.append(Paragraph("Travel Events", title_style))
-    elements.append(Paragraph("Music, Arts and Sport tours to Germany and Europe", normal_style))
+    # Company Header (From)
+    elements.append(Paragraph("<b>Travel Events</b>", bold_style))
+    elements.append(Paragraph("M. A. von Arnim", small_style))
+    elements.append(Paragraph("Schleiermacherstr. 1", small_style))
+    elements.append(Paragraph("06114 Halle", small_style))
     elements.append(Spacer(1, 20))
     
     elements.append(Paragraph(t["invoice"], title_style))
@@ -335,9 +350,10 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     
     # Booking details table
     hotel_name = hotel.get('name_en', hotel['name']) if language == 'en' else hotel['name']
+    room_type_display = booking.get('room_type_display', room_types.get(booking['room_type'], booking['room_type']))
     data = [
         [t['hotel'], hotel_name],
-        [t['room_type'], room_types.get(booking['room_type'], booking['room_type'])],
+        [t['room_type'], room_type_display],
         [t['check_in'], booking['check_in']],
         [t['check_out'], booking['check_out']],
         [t['nights'], str(booking['nights'])],
@@ -365,10 +381,16 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     elements.append(Spacer(1, 30))
     elements.append(Paragraph(t['thank_you'], bold_style))
     
-    # Footer
+    # Footer with Bank Details
     elements.append(Spacer(1, 40))
-    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.gray)
-    elements.append(Paragraph("Travel Events | info@travel-events.de | www.travel-events.de", footer_style))
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'))
+    footer_bold = ParagraphStyle('FooterBold', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'), fontName='Helvetica-Bold')
+    
+    bank_label = "Bankverbindung / Banking Details:" if language == "de" else "Banking Details / Bankverbindung:"
+    elements.append(Paragraph(f"<b>{bank_label}</b>", footer_bold))
+    elements.append(Paragraph("N26 Bank, IBAN: DE77100110012713041577, BIC (Swift): NTSBDEB1XXX", footer_style))
+    elements.append(Spacer(1, 5))
+    elements.append(Paragraph("Steuernummer: 110/202/40794 · Ust.Id Nr. / VAT ID No.: DE 229 059 172", footer_style))
     
     doc.build(elements)
     buffer.seek(0)
