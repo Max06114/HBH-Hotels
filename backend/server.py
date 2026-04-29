@@ -28,6 +28,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from contextlib import asynccontextmanager
 
+# Import email templates
+from services import (
+    generate_booking_confirmation_email,
+    generate_remaining_payment_confirmation_email,
+    generate_payment_reminder_email,
+    generate_cancellation_email
+)
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -701,32 +709,8 @@ async def get_stripe_status(request: Request, session_id: str):
                     # Send confirmation email for remaining balance
                     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
                     if hotel:
-                        remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
                         lang = booking.get("language", "de")
-                        if lang == "de":
-                            subject = f"Zahlungsbestätigung Restzahlung - {booking['booking_number']}"
-                            body = f"""
-                            <html><body style="font-family: Arial, sans-serif;">
-                            <h2 style="color: #6B1D2A;">Restzahlung erfolgreich!</h2>
-                            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-                            <p>Ihre Restzahlung über <strong>{remaining_formatted} €</strong> für Ihre Buchung im {hotel['name']} wurde erfolgreich bezahlt.</p>
-                            <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
-                            <p>Ihre Buchung ist nun vollständig bezahlt. Wir freuen uns auf Ihren Besuch!</p>
-                            <p>Mit freundlichen Grüßen,<br><strong>Max von Arnim</strong><br>Travel Events</p>
-                            </body></html>
-                            """
-                        else:
-                            subject = f"Payment Confirmation - Remaining Balance - {booking['booking_number']}"
-                            body = f"""
-                            <html><body style="font-family: Arial, sans-serif;">
-                            <h2 style="color: #6B1D2A;">Remaining Balance Paid!</h2>
-                            <p>Dear {booking['salutation']} {booking['last_name']},</p>
-                            <p>Your remaining payment of <strong>€{booking['remaining_amount']:.2f}</strong> for your booking at {hotel['name']} has been successfully paid.</p>
-                            <p>Booking number: <strong>{booking['booking_number']}</strong></p>
-                            <p>Your booking is now fully paid. We look forward to your visit!</p>
-                            <p>Best regards,<br><strong>Max von Arnim</strong><br>Travel Events</p>
-                            </body></html>
-                            """
+                        subject, body = generate_remaining_payment_confirmation_email(booking, hotel, "stripe", lang)
                         await send_email(booking['email'], subject, body)
             else:
                 # Deposit payment - original logic
@@ -746,40 +730,9 @@ async def get_stripe_status(request: Request, session_id: str):
                     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
                     if hotel:
                         updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
-                        pdf = generate_invoice_pdf(updated_booking, hotel, booking.get("language", "de"))
-                        
                         lang = booking.get("language", "de")
-                        if lang == "de":
-                            subject = f"Buchungsbestätigung - {booking['booking_number']}"
-                            body = f"""
-                            <html><body>
-                            <h2>Vielen Dank für Ihre Buchung!</h2>
-                            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-                            <p>Ihre Buchung für Happy Birthday Händel 2026 wurde erfolgreich bestätigt.</p>
-                            <p><strong>Buchungsnummer:</strong> {booking['booking_number']}</p>
-                            <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
-                            <p><strong>Anreise:</strong> {booking['check_in']}</p>
-                            <p><strong>Abreise:</strong> {booking['check_out']}</p>
-                            <p>Ihre Rechnung finden Sie im Anhang.</p>
-                            <p>Mit freundlichen Grüßen,<br>Travel Events</p>
-                            </body></html>
-                            """
-                        else:
-                            subject = f"Booking Confirmation - {booking['booking_number']}"
-                            body = f"""
-                            <html><body>
-                            <h2>Thank you for your booking!</h2>
-                            <p>Dear {booking['salutation']} {booking['last_name']},</p>
-                            <p>Your booking for Happy Birthday Händel 2026 has been confirmed.</p>
-                            <p><strong>Booking Number:</strong> {booking['booking_number']}</p>
-                            <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
-                            <p><strong>Check-in:</strong> {booking['check_in']}</p>
-                            <p><strong>Check-out:</strong> {booking['check_out']}</p>
-                            <p>Please find your invoice attached.</p>
-                            <p>Best regards,<br>Travel Events</p>
-                            </body></html>
-                            """
-                        
+                        pdf = generate_invoice_pdf(updated_booking, hotel, lang)
+                        subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang)
                         await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
     
     return {
@@ -985,32 +938,8 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                 # Send confirmation email for remaining balance
                 hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
                 if hotel:
-                    remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
                     lang = booking.get("language", "de")
-                    if lang == "de":
-                        subject = f"Zahlungsbestätigung Restzahlung - {booking['booking_number']}"
-                        body = f"""
-                        <html><body style="font-family: Arial, sans-serif;">
-                        <h2 style="color: #6B1D2A;">Restzahlung erfolgreich!</h2>
-                        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-                        <p>Ihre Restzahlung über <strong>{remaining_formatted} €</strong> für Ihre Buchung im {hotel['name']} wurde erfolgreich per PayPal bezahlt.</p>
-                        <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
-                        <p>Ihre Buchung ist nun vollständig bezahlt. Wir freuen uns auf Ihren Besuch!</p>
-                        <p>Mit freundlichen Grüßen,<br><strong>Max von Arnim</strong><br>Travel Events</p>
-                        </body></html>
-                        """
-                    else:
-                        subject = f"Payment Confirmation - Remaining Balance - {booking['booking_number']}"
-                        body = f"""
-                        <html><body style="font-family: Arial, sans-serif;">
-                        <h2 style="color: #6B1D2A;">Remaining Balance Paid!</h2>
-                        <p>Dear {booking['salutation']} {booking['last_name']},</p>
-                        <p>Your remaining payment of <strong>€{booking['remaining_amount']:.2f}</strong> for your booking at {hotel['name']} has been successfully paid via PayPal.</p>
-                        <p>Booking number: <strong>{booking['booking_number']}</strong></p>
-                        <p>Your booking is now fully paid. We look forward to your visit!</p>
-                        <p>Best regards,<br><strong>Max von Arnim</strong><br>Travel Events</p>
-                        </body></html>
-                        """
+                    subject, body = generate_remaining_payment_confirmation_email(booking, hotel, "paypal", lang)
                     await send_email(booking['email'], subject, body)
                 
                 return {"status": "COMPLETED", "booking_id": booking["id"], "payment_type": "remaining"}
@@ -1043,42 +972,9 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                 hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
                 if hotel:
                     updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
-                    pdf = generate_invoice_pdf(updated_booking, hotel, booking.get("language", "de"))
-                    
                     lang = booking.get("language", "de")
-                    if lang == "de":
-                        subject = f"Buchungsbestätigung - {booking['booking_number']}"
-                        body = f"""
-                        <html><body>
-                        <h2>Vielen Dank für Ihre Buchung!</h2>
-                        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-                        <p>Ihre Anzahlung über <strong>{booking['deposit_amount']:.2f} €</strong> wurde erfolgreich per PayPal bezahlt.</p>
-                        <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
-                        <p>Hotel: {hotel['name']}</p>
-                        <p>Anreise: {booking['check_in']}</p>
-                        <p>Abreise: {booking['check_out']}</p>
-                        <p>Der Restbetrag von <strong>{booking['remaining_amount']:.2f} €</strong> ist 6 Wochen vor Anreise fällig.</p>
-                        <p>Anbei finden Sie Ihre Rechnung.</p>
-                        <p>Mit freundlichen Grüßen,<br>Travel Events</p>
-                        </body></html>
-                        """
-                    else:
-                        subject = f"Booking Confirmation - {booking['booking_number']}"
-                        body = f"""
-                        <html><body>
-                        <h2>Thank you for your booking!</h2>
-                        <p>Dear {booking['salutation']} {booking['last_name']},</p>
-                        <p>Your deposit of <strong>€{booking['deposit_amount']:.2f}</strong> has been paid via PayPal.</p>
-                        <p>Booking number: <strong>{booking['booking_number']}</strong></p>
-                        <p>Hotel: {hotel['name']}</p>
-                        <p>Check-in: {booking['check_in']}</p>
-                        <p>Check-out: {booking['check_out']}</p>
-                        <p>The remaining amount of <strong>€{booking['remaining_amount']:.2f}</strong> is due 6 weeks before arrival.</p>
-                        <p>Please find your invoice attached.</p>
-                        <p>Best regards,<br>Travel Events</p>
-                        </body></html>
-                        """
-                    
+                    pdf = generate_invoice_pdf(updated_booking, hotel, lang)
+                    subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang)
                     await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
                 
                 return {"status": "COMPLETED", "booking_id": booking["id"]}
@@ -1189,44 +1085,9 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
     )
     
     # Send cancellation email with refund info
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
     lang = booking.get("language", "de")
-    if lang == "de":
-        refund_text = ""
-        if refund_amount > 0:
-            refund_text = f"<p>Erstattung: <strong>{refund_amount:.2f} €</strong> ({refund_percentage}% gemäß Stornobedingungen)</p>"
-        elif refund_percentage == 0:
-            refund_text = "<p>Gemäß unseren Stornobedingungen (weniger als 1 Tag vor Anreise) ist leider keine Erstattung möglich.</p>"
-        
-        subject = f"Stornierungsbestätigung - {booking['booking_number']}"
-        body = f"""
-        <html><body>
-        <h2>Stornierungsbestätigung</h2>
-        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-        <p>Ihre Buchung <strong>{booking['booking_number']}</strong> wurde storniert.</p>
-        {refund_text}
-        <p>Die Erstattung wird innerhalb von 5-10 Werktagen auf Ihrem Konto gutgeschrieben.</p>
-        <p>Mit freundlichen Grüßen,<br>Travel Events</p>
-        </body></html>
-        """
-    else:
-        refund_text = ""
-        if refund_amount > 0:
-            refund_text = f"<p>Refund: <strong>{refund_amount:.2f} €</strong> ({refund_percentage}% according to cancellation policy)</p>"
-        elif refund_percentage == 0:
-            refund_text = "<p>According to our cancellation policy (less than 1 day before arrival), no refund is possible.</p>"
-        
-        subject = f"Cancellation Confirmation - {booking['booking_number']}"
-        body = f"""
-        <html><body>
-        <h2>Cancellation Confirmation</h2>
-        <p>Dear {booking['salutation']} {booking['last_name']},</p>
-        <p>Your booking <strong>{booking['booking_number']}</strong> has been cancelled.</p>
-        {refund_text}
-        <p>The refund will be credited to your account within 5-10 business days.</p>
-        <p>Best regards,<br>Travel Events</p>
-        </body></html>
-        """
-    
+    subject, body = generate_cancellation_email(booking, hotel, refund_amount, refund_percentage, lang)
     await send_email(booking['email'], subject, body)
     
     return {
@@ -1662,128 +1523,8 @@ async def send_payment_reminder_with_link(booking: dict, stripe_url: str = None,
     # Invoice download link (correct endpoint)
     invoice_link = f"{base_url}/api/bookings/{booking['id']}/invoice"
     
-    # Format remaining amount with comma (German format)
-    remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
-    
     lang = booking.get("language", "de")
-    if lang == "de":
-        subject = f"Zahlungserinnerung - Restzahlung für Ihre Hotelbuchung"
-        body = f"""
-        <html><body style="font-family: Arial, sans-serif; line-height: 1.8; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #FDFBF7;">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h2 style="color: #6B1D2A; margin: 0;">Zahlungserinnerung</h2>
-            </div>
-            
-            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-            
-            <p>in einer Woche ist die Restzahlung für Ihre Hotelbuchung im <strong>{hotel['name']}</strong> fällig.</p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background: white;">
-                <tr style="background: #F5F2EA;">
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Buchungsnummer:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{hotel['name']}</td>
-                </tr>
-                <tr style="background: #F5F2EA;">
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Anreise:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Abreise:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
-                </tr>
-                <tr style="background: #6B1D2A; color: white;">
-                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>Restbetrag:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>{remaining_formatted} €</strong></td>
-                </tr>
-            </table>
-            
-            <p>Bitte benutzen Sie einen der folgenden Zahlungslinks:</p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{stripe_url}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Mit Kreditkarte bezahlen</a>
-                <br><br>
-                <a href="{paypal_url}" style="display: inline-block; background: #0070BA; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Mit PayPal bezahlen</a>
-            </div>
-            
-            <p style="font-size: 14px; color: #666; text-align: center;">
-                <a href="{invoice_link}" style="color: #6B1D2A;">Rechnung herunterladen</a>
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
-            
-            <p>Mit freundlichen Grüßen,</p>
-            <p><strong>Max von Arnim</strong><br>Travel Events</p>
-            
-            <p style="font-size: 12px; color: #999; margin-top: 30px;">
-                Bei Fragen erreichen Sie uns unter info@travel-events.de
-            </p>
-        </div>
-        </body></html>
-        """
-    else:
-        subject = f"Payment Reminder - Remaining Balance for Your Hotel Booking"
-        body = f"""
-        <html><body style="font-family: Arial, sans-serif; line-height: 1.8; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #FDFBF7;">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h2 style="color: #6B1D2A; margin: 0;">Payment Reminder</h2>
-            </div>
-            
-            <p>Dear {booking['salutation']} {booking['last_name']},</p>
-            
-            <p>The remaining payment for your hotel booking at <strong>{hotel['name']}</strong> is due in one week.</p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background: white;">
-                <tr style="background: #F5F2EA;">
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Booking Number:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['booking_number']}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Hotel:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{hotel['name']}</td>
-                </tr>
-                <tr style="background: #F5F2EA;">
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Check-in:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_in']}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;"><strong>Check-out:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #E5E0D5;">{booking['check_out']}</td>
-                </tr>
-                <tr style="background: #6B1D2A; color: white;">
-                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>Remaining Amount:</strong></td>
-                    <td style="padding: 12px; border: 1px solid #6B1D2A;"><strong>€{booking['remaining_amount']:.2f}</strong></td>
-                </tr>
-            </table>
-            
-            <p>Please use one of the following payment links:</p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{stripe_url}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Pay with Credit Card</a>
-                <br><br>
-                <a href="{paypal_url}" style="display: inline-block; background: #0070BA; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Pay with PayPal</a>
-            </div>
-            
-            <p style="font-size: 14px; color: #666; text-align: center;">
-                <a href="{invoice_link}" style="color: #6B1D2A;">Download Invoice</a>
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
-            
-            <p>Best regards,</p>
-            <p><strong>Max von Arnim</strong><br>Travel Events</p>
-            
-            <p style="font-size: 12px; color: #999; margin-top: 30px;">
-                For questions, please contact us at info@travel-events.de
-            </p>
-        </div>
-        </body></html>
-        """
+    subject, body = generate_payment_reminder_email(booking, hotel, stripe_url, paypal_url, invoice_link, lang)
     
     try:
         await send_email(booking['email'], subject, body)
