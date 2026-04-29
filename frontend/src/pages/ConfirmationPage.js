@@ -23,19 +23,61 @@ const ConfirmationPage = () => {
   
   const sessionId = searchParams.get('session_id');
   const bookingId = searchParams.get('booking_id');
+  const paymentType = searchParams.get('payment_type'); // 'deposit' or 'remaining'
+  const paymentMethod = searchParams.get('method'); // 'stripe' or 'paypal'
 
   const [status, setStatus] = useState('loading');
   const [booking, setBooking] = useState(null);
   const [pollCount, setPollCount] = useState(0);
+  const [isRemainingPayment, setIsRemainingPayment] = useState(paymentType === 'remaining');
 
   useEffect(() => {
-    if (sessionId) {
+    if (paymentMethod === 'paypal' && bookingId) {
+      // PayPal return - need to capture the order
+      capturePayPalOrder();
+    } else if (sessionId) {
       pollPaymentStatus();
     } else {
       setStatus('error');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, paymentMethod, bookingId]);
+
+  const capturePayPalOrder = async () => {
+    try {
+      // Get the booking to find the PayPal order ID
+      const bookingResponse = await axios.get(`${API}/bookings/${bookingId}`);
+      const bookingData = bookingResponse.data;
+      
+      // Determine which order ID to use based on payment type
+      const orderId = paymentType === 'remaining' 
+        ? bookingData.paypal_remaining_order_id 
+        : bookingData.paypal_order_id;
+      
+      if (!orderId) {
+        setStatus('error');
+        return;
+      }
+      
+      // Capture the PayPal order
+      const captureResponse = await axios.post(`${API}/payments/paypal/capture-order`, {
+        order_id: orderId
+      });
+      
+      if (captureResponse.data.status === 'COMPLETED') {
+        setStatus('success');
+        setIsRemainingPayment(captureResponse.data.payment_type === 'remaining');
+        // Fetch updated booking details
+        const updatedBooking = await axios.get(`${API}/bookings/${bookingId}`);
+        setBooking(updatedBooking.data);
+      } else {
+        setStatus('error');
+      }
+    } catch (error) {
+      console.error('Error capturing PayPal order:', error);
+      setStatus('error');
+    }
+  };
 
   const pollPaymentStatus = async () => {
     const maxAttempts = 5;
@@ -51,6 +93,10 @@ const ConfirmationPage = () => {
       
       if (statusResponse.data.payment_status === 'paid') {
         setStatus('success');
+        // Check if this was a remaining payment by looking at metadata
+        if (statusResponse.data.metadata?.payment_type === 'remaining') {
+          setIsRemainingPayment(true);
+        }
         // Fetch booking details
         if (bookingId) {
           const bookingResponse = await axios.get(`${API}/bookings/${bookingId}`);
@@ -116,11 +162,17 @@ const ConfirmationPage = () => {
                   </div>
                   
                   <h2 className="font-serif text-3xl text-[#1A1A1A] mb-2">
-                    {t('paymentSuccess')}
+                    {isRemainingPayment 
+                      ? (language === 'de' ? 'Restzahlung erfolgreich!' : 'Remaining Balance Paid!')
+                      : t('paymentSuccess')}
                   </h2>
                   
                   <p className="text-[#4A4A4A] mb-8">
-                    {t('confirmationTitle')}
+                    {isRemainingPayment
+                      ? (language === 'de' 
+                          ? 'Ihre Buchung ist nun vollständig bezahlt.' 
+                          : 'Your booking is now fully paid.')
+                      : t('confirmationTitle')}
                   </p>
 
                   {booking && (
@@ -142,10 +194,28 @@ const ConfirmationPage = () => {
                           <p className="font-medium">{booking.check_out}</p>
                         </div>
                         <div>
-                          <span className="text-[#4A4A4A]">{t('deposit')}</span>
-                          <p className="font-medium text-[#2E7D32]">{formatPrice(booking.deposit_amount)} € {language === 'de' ? 'bezahlt' : 'paid'}</p>
+                          <span className="text-[#4A4A4A]">
+                            {isRemainingPayment 
+                              ? (language === 'de' ? 'Gesamtbetrag' : 'Total Amount')
+                              : t('deposit')}
+                          </span>
+                          <p className="font-medium text-[#2E7D32]">
+                            {isRemainingPayment 
+                              ? `${formatPrice(booking.total_price)} € ${language === 'de' ? 'bezahlt' : 'paid'}`
+                              : `${formatPrice(booking.deposit_amount)} € ${language === 'de' ? 'bezahlt' : 'paid'}`}
+                          </p>
                         </div>
                       </div>
+                      
+                      {isRemainingPayment && (
+                        <div className="mt-4 pt-4 border-t border-[#E5E0D5]">
+                          <p className="text-sm text-[#2E7D32] font-medium">
+                            {language === 'de' 
+                              ? '✓ Buchung vollständig bezahlt' 
+                              : '✓ Booking fully paid'}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 

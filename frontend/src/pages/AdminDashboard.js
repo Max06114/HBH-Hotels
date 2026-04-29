@@ -678,6 +678,7 @@ const RemindersManagement = () => {
   const [pendingReminders, setPendingReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sendingSingle, setSendingSingle] = useState(null);
 
   useEffect(() => {
     fetchPendingReminders();
@@ -706,6 +707,22 @@ const RemindersManagement = () => {
       toast.error(language === 'de' ? 'Fehler beim Senden' : 'Error sending reminders');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendSingleReminder = async (bookingId) => {
+    setSendingSingle(bookingId);
+    try {
+      await axios.post(`${API}/admin/bookings/${bookingId}/send-reminder`, {}, { headers: getAuthHeaders() });
+      toast.success(language === 'de' 
+        ? 'Zahlungserinnerung mit Zahlungslinks gesendet!' 
+        : 'Payment reminder with payment links sent!');
+      fetchPendingReminders();
+    } catch (error) {
+      const errorMsg = error.response?.data?.detail || (language === 'de' ? 'Fehler beim Senden' : 'Error sending reminder');
+      toast.error(errorMsg);
+    } finally {
+      setSendingSingle(null);
     }
   };
 
@@ -763,6 +780,7 @@ const RemindersManagement = () => {
                   <TableHead>{language === 'de' ? 'Anreise' : 'Check-in'}</TableHead>
                   <TableHead>{language === 'de' ? 'Tage bis Anreise' : 'Days until'}</TableHead>
                   <TableHead>{language === 'de' ? 'Restbetrag' : 'Remaining'}</TableHead>
+                  <TableHead>{language === 'de' ? 'Aktionen' : 'Actions'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -783,6 +801,24 @@ const RemindersManagement = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-semibold text-[#6B1D2A]">{formatPrice(booking.remaining_amount)} €</TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendSingleReminder(booking.id)}
+                        disabled={sendingSingle === booking.id}
+                        className="bg-[#6B1D2A] hover:bg-[#8A2536] text-xs"
+                        data-testid={`send-reminder-${booking.id}`}
+                      >
+                        {sendingSingle === booking.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+                            <Mail className="w-3 h-3 mr-1" />
+                            {language === 'de' ? 'Senden' : 'Send'}
+                          </>
+                        )}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -800,8 +836,8 @@ const RemindersManagement = () => {
         <p className="text-sm text-[#4A4A4A]">
           <strong>{language === 'de' ? 'Info:' : 'Info:'}</strong>{' '}
           {language === 'de' 
-            ? 'Zahlungserinnerungen werden automatisch an Gäste gesendet, deren Anreise in 6 Wochen oder weniger ist und die noch den Restbetrag (75%) zahlen müssen.'
-            : 'Payment reminders are automatically sent to guests whose check-in is in 6 weeks or less and who still need to pay the remaining balance (75%).'}
+            ? 'Zahlungserinnerungen enthalten automatisch generierte Zahlungslinks für Stripe (Kreditkarte) und PayPal sowie einen Link zum Download der Rechnung. Klicken Sie auf "Senden", um eine individuelle Erinnerung zu versenden.'
+            : 'Payment reminders automatically include generated payment links for Stripe (credit card) and PayPal, plus an invoice download link. Click "Send" to send individual reminders.'}
         </p>
       </div>
     </div>

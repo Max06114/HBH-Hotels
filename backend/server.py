@@ -573,70 +573,135 @@ async def get_stripe_status(request: Request, session_id: str):
     stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
     status = await stripe_checkout.get_checkout_status(session_id)
     
+    # Default values
+    booking = None
+    is_remaining_payment = False
+    
     # Update transaction and booking
     if status.payment_status == "paid":
-        tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-        if tx and tx["status"] != "paid":
-            await db.payment_transactions.update_one(
-                {"session_id": session_id},
-                {"$set": {"status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
-            
+        # Check if this is a remaining balance payment
+        booking = await db.bookings.find_one({"stripe_remaining_session_id": session_id}, {"_id": 0})
+        is_remaining_payment = booking is not None
+        
+        if not booking:
+            # Check for deposit payment
             booking = await db.bookings.find_one({"stripe_session_id": session_id}, {"_id": 0})
-            if booking:
-                payment_type = tx.get("metadata", {}).get("payment_type", "deposit")
-                new_status = "deposit_paid" if payment_type == "deposit" else "fully_paid"
-                
-                await db.bookings.update_one(
-                    {"id": booking["id"]},
-                    {"$set": {"payment_status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
-                )
-                
-                # Send confirmation email with invoice
-                hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
-                if hotel:
-                    updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
-                    pdf = generate_invoice_pdf(updated_booking, hotel, booking.get("language", "de"))
+        
+        if booking:
+            if is_remaining_payment:
+                # This is a remaining balance payment
+                if booking.get("payment_status") != "fully_paid":
+                    await db.bookings.update_one(
+                        {"id": booking["id"]},
+                        {"$set": {
+                            "payment_status": "fully_paid", 
+                            "remaining_paid_at": datetime.now(timezone.utc).isoformat(),
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
                     
-                    lang = booking.get("language", "de")
-                    if lang == "de":
-                        subject = f"Buchungsbestätigung - {booking['booking_number']}"
-                        body = f"""
-                        <html><body>
-                        <h2>Vielen Dank für Ihre Buchung!</h2>
-                        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-                        <p>Ihre Buchung für Happy Birthday Händel 2026 wurde erfolgreich bestätigt.</p>
-                        <p><strong>Buchungsnummer:</strong> {booking['booking_number']}</p>
-                        <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
-                        <p><strong>Anreise:</strong> {booking['check_in']}</p>
-                        <p><strong>Abreise:</strong> {booking['check_out']}</p>
-                        <p>Ihre Rechnung finden Sie im Anhang.</p>
-                        <p>Mit freundlichen Grüßen,<br>Travel Events</p>
-                        </body></html>
-                        """
-                    else:
-                        subject = f"Booking Confirmation - {booking['booking_number']}"
-                        body = f"""
-                        <html><body>
-                        <h2>Thank you for your booking!</h2>
-                        <p>Dear {booking['salutation']} {booking['last_name']},</p>
-                        <p>Your booking for Happy Birthday Händel 2026 has been confirmed.</p>
-                        <p><strong>Booking Number:</strong> {booking['booking_number']}</p>
-                        <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
-                        <p><strong>Check-in:</strong> {booking['check_in']}</p>
-                        <p><strong>Check-out:</strong> {booking['check_out']}</p>
-                        <p>Please find your invoice attached.</p>
-                        <p>Best regards,<br>Travel Events</p>
-                        </body></html>
-                        """
+                    # Create payment transaction record
+                    await db.payment_transactions.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "booking_id": booking["id"],
+                        "session_id": session_id,
+                        "payment_method": "stripe",
+                        "payment_type": "remaining",
+                        "amount": booking["remaining_amount"],
+                        "status": "paid",
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    })
                     
-                    await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
+                    # Send confirmation email for remaining balance
+                    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+                    if hotel:
+                        remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
+                        lang = booking.get("language", "de")
+                        if lang == "de":
+                            subject = f"Zahlungsbestätigung Restzahlung - {booking['booking_number']}"
+                            body = f"""
+                            <html><body style="font-family: Arial, sans-serif;">
+                            <h2 style="color: #6B1D2A;">Restzahlung erfolgreich!</h2>
+                            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                            <p>Ihre Restzahlung über <strong>{remaining_formatted} €</strong> für Ihre Buchung im {hotel['name']} wurde erfolgreich bezahlt.</p>
+                            <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
+                            <p>Ihre Buchung ist nun vollständig bezahlt. Wir freuen uns auf Ihren Besuch!</p>
+                            <p>Mit freundlichen Grüßen,<br><strong>Max von Arnim</strong><br>Travel Events</p>
+                            </body></html>
+                            """
+                        else:
+                            subject = f"Payment Confirmation - Remaining Balance - {booking['booking_number']}"
+                            body = f"""
+                            <html><body style="font-family: Arial, sans-serif;">
+                            <h2 style="color: #6B1D2A;">Remaining Balance Paid!</h2>
+                            <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                            <p>Your remaining payment of <strong>€{booking['remaining_amount']:.2f}</strong> for your booking at {hotel['name']} has been successfully paid.</p>
+                            <p>Booking number: <strong>{booking['booking_number']}</strong></p>
+                            <p>Your booking is now fully paid. We look forward to your visit!</p>
+                            <p>Best regards,<br><strong>Max von Arnim</strong><br>Travel Events</p>
+                            </body></html>
+                            """
+                        await send_email(booking['email'], subject, body)
+            else:
+                # Deposit payment - original logic
+                tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+                if tx and tx["status"] != "paid":
+                    await db.payment_transactions.update_one(
+                        {"session_id": session_id},
+                        {"$set": {"status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
+                    )
+                    
+                    await db.bookings.update_one(
+                        {"id": booking["id"]},
+                        {"$set": {"payment_status": "deposit_paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
+                    )
+                    
+                    # Send confirmation email with invoice
+                    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+                    if hotel:
+                        updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
+                        pdf = generate_invoice_pdf(updated_booking, hotel, booking.get("language", "de"))
+                        
+                        lang = booking.get("language", "de")
+                        if lang == "de":
+                            subject = f"Buchungsbestätigung - {booking['booking_number']}"
+                            body = f"""
+                            <html><body>
+                            <h2>Vielen Dank für Ihre Buchung!</h2>
+                            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                            <p>Ihre Buchung für Happy Birthday Händel 2026 wurde erfolgreich bestätigt.</p>
+                            <p><strong>Buchungsnummer:</strong> {booking['booking_number']}</p>
+                            <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
+                            <p><strong>Anreise:</strong> {booking['check_in']}</p>
+                            <p><strong>Abreise:</strong> {booking['check_out']}</p>
+                            <p>Ihre Rechnung finden Sie im Anhang.</p>
+                            <p>Mit freundlichen Grüßen,<br>Travel Events</p>
+                            </body></html>
+                            """
+                        else:
+                            subject = f"Booking Confirmation - {booking['booking_number']}"
+                            body = f"""
+                            <html><body>
+                            <h2>Thank you for your booking!</h2>
+                            <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                            <p>Your booking for Happy Birthday Händel 2026 has been confirmed.</p>
+                            <p><strong>Booking Number:</strong> {booking['booking_number']}</p>
+                            <p><strong>Hotel:</strong> {booking['hotel_name']}</p>
+                            <p><strong>Check-in:</strong> {booking['check_in']}</p>
+                            <p><strong>Check-out:</strong> {booking['check_out']}</p>
+                            <p>Please find your invoice attached.</p>
+                            <p>Best regards,<br>Travel Events</p>
+                            </body></html>
+                            """
+                        
+                        await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
     
     return {
         "status": status.status,
         "payment_status": status.payment_status,
         "amount_total": status.amount_total,
-        "currency": status.currency
+        "currency": status.currency,
+        "metadata": {"payment_type": "remaining" if booking and is_remaining_payment else "deposit"} if status.payment_status == "paid" else None
     }
 
 @api_router.post("/webhook/stripe")
@@ -803,7 +868,68 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
         capture = capture_response.json()
         
         if capture.get("status") == "COMPLETED":
-            # Find and update booking
+            # Check if this is a remaining balance payment
+            booking = await db.bookings.find_one({"paypal_remaining_order_id": capture_data.order_id}, {"_id": 0})
+            
+            if booking:
+                # This is a remaining balance payment
+                await db.bookings.update_one(
+                    {"id": booking["id"]},
+                    {"$set": {
+                        "payment_status": "fully_paid",
+                        "paypal_remaining_capture_id": capture["purchase_units"][0]["payments"]["captures"][0]["id"],
+                        "remaining_paid_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+                
+                # Create payment transaction record
+                await db.payment_transactions.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "booking_id": booking["id"],
+                    "payment_method": "paypal",
+                    "payment_type": "remaining",
+                    "paypal_order_id": capture_data.order_id,
+                    "paypal_capture_id": capture["purchase_units"][0]["payments"]["captures"][0]["id"],
+                    "amount": booking["remaining_amount"],
+                    "status": "completed",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Send confirmation email for remaining balance
+                hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+                if hotel:
+                    remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
+                    lang = booking.get("language", "de")
+                    if lang == "de":
+                        subject = f"Zahlungsbestätigung Restzahlung - {booking['booking_number']}"
+                        body = f"""
+                        <html><body style="font-family: Arial, sans-serif;">
+                        <h2 style="color: #6B1D2A;">Restzahlung erfolgreich!</h2>
+                        <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                        <p>Ihre Restzahlung über <strong>{remaining_formatted} €</strong> für Ihre Buchung im {hotel['name']} wurde erfolgreich per PayPal bezahlt.</p>
+                        <p>Buchungsnummer: <strong>{booking['booking_number']}</strong></p>
+                        <p>Ihre Buchung ist nun vollständig bezahlt. Wir freuen uns auf Ihren Besuch!</p>
+                        <p>Mit freundlichen Grüßen,<br><strong>Max von Arnim</strong><br>Travel Events</p>
+                        </body></html>
+                        """
+                    else:
+                        subject = f"Payment Confirmation - Remaining Balance - {booking['booking_number']}"
+                        body = f"""
+                        <html><body style="font-family: Arial, sans-serif;">
+                        <h2 style="color: #6B1D2A;">Remaining Balance Paid!</h2>
+                        <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                        <p>Your remaining payment of <strong>€{booking['remaining_amount']:.2f}</strong> for your booking at {hotel['name']} has been successfully paid via PayPal.</p>
+                        <p>Booking number: <strong>{booking['booking_number']}</strong></p>
+                        <p>Your booking is now fully paid. We look forward to your visit!</p>
+                        <p>Best regards,<br><strong>Max von Arnim</strong><br>Travel Events</p>
+                        </body></html>
+                        """
+                    await send_email(booking['email'], subject, body)
+                
+                return {"status": "COMPLETED", "booking_id": booking["id"], "payment_type": "remaining"}
+            
+            # Check for deposit payment
             booking = await db.bookings.find_one({"paypal_order_id": capture_data.order_id}, {"_id": 0})
             if booking:
                 await db.bookings.update_one(
@@ -1239,6 +1365,100 @@ async def admin_get_stats(admin: dict = Depends(get_current_admin)):
 
 # ============== PAYMENT REMINDERS ==============
 
+async def generate_remaining_payment_links(booking: dict, hotel: dict, base_url: str) -> dict:
+    """Generate Stripe and PayPal payment links for remaining balance."""
+    import httpx
+    import stripe
+    
+    stripe_url = None
+    paypal_url = None
+    
+    # Create Stripe checkout session
+    try:
+        stripe.api_key = os.environ.get('STRIPE_API_KEY')
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'eur',
+                    'unit_amount': int(booking["remaining_amount"] * 100),
+                    'product_data': {
+                        'name': f'Restzahlung: {hotel["name"]}',
+                        'description': f'Buchung {booking["booking_number"]} - Restbetrag'
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f'{base_url}/booking/confirmation?session_id={{CHECKOUT_SESSION_ID}}&booking_id={booking["id"]}&payment_type=remaining',
+            cancel_url=f'{base_url}/',
+            customer_email=booking["email"],
+            metadata={
+                'booking_id': booking["id"],
+                'payment_type': 'remaining'
+            }
+        )
+        stripe_url = session.url
+        
+        # Store the session ID
+        await db.bookings.update_one(
+            {"id": booking["id"]},
+            {"$set": {"stripe_remaining_session_id": session.id}}
+        )
+    except Exception as e:
+        logging.error(f"Stripe session creation failed: {e}")
+    
+    # Create PayPal order
+    try:
+        client_id = os.environ.get('PAYPAL_CLIENT_ID')
+        client_secret = os.environ.get('PAYPAL_SECRET')
+        
+        async with httpx.AsyncClient() as client:
+            auth_response = await client.post(
+                "https://api-m.paypal.com/v1/oauth2/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                auth=(client_id, client_secret),
+                data={"grant_type": "client_credentials"}
+            )
+            access_token = auth_response.json()["access_token"]
+            
+            order_response = await client.post(
+                "https://api-m.paypal.com/v2/checkout/orders",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {access_token}"
+                },
+                json={
+                    "intent": "CAPTURE",
+                    "purchase_units": [{
+                        "reference_id": booking["id"],
+                        "description": f"Restzahlung: {hotel['name']} - {booking['booking_number']}",
+                        "amount": {
+                            "currency_code": "EUR",
+                            "value": str(booking["remaining_amount"])
+                        }
+                    }],
+                    "application_context": {
+                        "return_url": f"{base_url}/booking/confirmation?booking_id={booking['id']}&payment_type=remaining&method=paypal",
+                        "cancel_url": f"{base_url}/"
+                    }
+                }
+            )
+            order = order_response.json()
+            
+            # Get approval URL
+            paypal_url = next((link["href"] for link in order.get("links", []) if link["rel"] == "approve"), None)
+            
+            # Store the order ID
+            await db.bookings.update_one(
+                {"id": booking["id"]},
+                {"$set": {"paypal_remaining_order_id": order.get("id")}}
+            )
+    except Exception as e:
+        logging.error(f"PayPal order creation failed: {e}")
+    
+    return {"stripe_url": stripe_url, "paypal_url": paypal_url}
+
 @api_router.post("/payments/remaining/{booking_id}")
 async def create_remaining_payment_link(booking_id: str):
     """Create a payment link for the remaining balance."""
@@ -1338,16 +1558,23 @@ async def create_remaining_payment_link(booking_id: str):
         
         return {"payment_url": session.url, "method": "stripe"}
 
-async def send_payment_reminder_with_link(booking: dict):
+async def send_payment_reminder_with_link(booking: dict, stripe_url: str = None, paypal_url: str = None):
     """Send payment reminder email with payment link for remaining balance."""
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
     if not hotel:
         return False
     
-    # Generate payment link
+    # Generate payment links if not provided
     base_url = os.environ.get("FRONTEND_URL", "https://event-payments-3.preview.emergentagent.com")
-    payment_link = f"{base_url}/pay-remaining/{booking['id']}"
-    invoice_link = f"{base_url}/api/invoices/{booking['id']}/download"
+    
+    # Generate Stripe and PayPal payment links
+    if not stripe_url or not paypal_url:
+        payment_links = await generate_remaining_payment_links(booking, hotel, base_url)
+        stripe_url = payment_links.get("stripe_url")
+        paypal_url = payment_links.get("paypal_url")
+    
+    # Invoice download link (correct endpoint)
+    invoice_link = f"{base_url}/api/bookings/{booking['id']}/invoice"
     
     # Format remaining amount with comma (German format)
     remaining_formatted = f"{booking['remaining_amount']:.2f}".replace('.', ',')
@@ -1389,14 +1616,16 @@ async def send_payment_reminder_with_link(booking: dict):
                 </tr>
             </table>
             
-            <p>Bitte benutzen Sie diesen Zahlungslink dafür:</p>
+            <p>Bitte benutzen Sie einen der folgenden Zahlungslinks:</p>
             
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{payment_link}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-weight: bold;">Jetzt bezahlen</a>
+                <a href="{stripe_url}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Mit Kreditkarte bezahlen</a>
+                <br><br>
+                <a href="{paypal_url}" style="display: inline-block; background: #0070BA; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Mit PayPal bezahlen</a>
             </div>
             
-            <p style="font-size: 14px; color: #666;">
-                <a href="{invoice_link}" style="color: #6B1D2A;">📄 Rechnung herunterladen</a>
+            <p style="font-size: 14px; color: #666; text-align: center;">
+                <a href="{invoice_link}" style="color: #6B1D2A;">Rechnung herunterladen</a>
             </p>
             
             <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
@@ -1446,14 +1675,16 @@ async def send_payment_reminder_with_link(booking: dict):
                 </tr>
             </table>
             
-            <p>Please use this payment link:</p>
+            <p>Please use one of the following payment links:</p>
             
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{payment_link}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-weight: bold;">Pay Now</a>
+                <a href="{stripe_url}" style="display: inline-block; background: #6B1D2A; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Pay with Credit Card</a>
+                <br><br>
+                <a href="{paypal_url}" style="display: inline-block; background: #0070BA; color: white; padding: 15px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 5px;">Pay with PayPal</a>
             </div>
             
-            <p style="font-size: 14px; color: #666;">
-                <a href="{invoice_link}" style="color: #6B1D2A;">📄 Download Invoice</a>
+            <p style="font-size: 14px; color: #666; text-align: center;">
+                <a href="{invoice_link}" style="color: #6B1D2A;">Download Invoice</a>
             </p>
             
             <hr style="border: none; border-top: 1px solid #E5E0D5; margin: 30px 0;">
@@ -1576,7 +1807,7 @@ async def admin_send_payment_reminders(admin: dict = Depends(get_current_admin))
     
     sent_count = 0
     for booking in bookings:
-        success = await send_payment_reminder(booking)
+        success = await send_payment_reminder_with_link(booking)
         if success:
             await db.bookings.update_one(
                 {"id": booking["id"]},
@@ -1585,6 +1816,27 @@ async def admin_send_payment_reminders(admin: dict = Depends(get_current_admin))
             sent_count += 1
     
     return {"message": f"Sent {sent_count} payment reminders", "total_eligible": len(bookings)}
+
+@api_router.post("/admin/bookings/{booking_id}/send-reminder")
+async def admin_send_single_reminder(booking_id: str, admin: dict = Depends(get_current_admin)):
+    """Send payment reminder with payment links to a single booking."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    if booking.get("payment_status") == "fully_paid":
+        raise HTTPException(status_code=400, detail="Booking already fully paid")
+    
+    success = await send_payment_reminder_with_link(booking)
+    
+    if success:
+        await db.bookings.update_one(
+            {"id": booking_id},
+            {"$set": {"reminder_sent": True, "reminder_sent_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        return {"message": "Payment reminder sent successfully", "booking_id": booking_id}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send payment reminder")
 
 @api_router.get("/admin/pending-reminders")
 async def admin_get_pending_reminders(admin: dict = Depends(get_current_admin)):
