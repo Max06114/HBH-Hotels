@@ -118,7 +118,7 @@ const HotelCard = ({ hotel, index }) => {
         </div>
 
         {/* Description */}
-        <p className="text-[#4A4A4A] text-sm mb-4 line-clamp-3">{description}</p>
+        <p className="text-[#4A4A4A] text-sm mb-4">{description}</p>
 
         {/* Amenities */}
         <div className="flex flex-wrap gap-2 mb-6">

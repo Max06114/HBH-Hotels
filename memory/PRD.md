@@ -130,14 +130,19 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [x] Automated weekly scheduler for payment reminders
 - [x] Professional bilingual email templates
 - [x] Backend/Frontend code refactoring
+- [x] HotelCard description text now expands dynamically (no more truncation)
 
 ### P2 - Medium Priority
-- [ ] End-to-End testing of full payment flow (deposit → reminder → remaining payment)
 - [ ] Further AdminDashboard.js component splitting (if needed)
 
 ### P3 - Low Priority
 - [ ] Additional admin analytics/charts
 - [ ] Further BookingPage.js refactoring
+
+## Changelog
+- **2025-12-19**: Fixed HotelCard description text truncation - removed `line-clamp-3` class so description text expands to fit full content (important for Dorint Hotel with detailed Standard/Comfort room descriptions)
+- **2025-12-18**: E2E payment flow tested successfully
+- **2025-12-18**: PDF invoice redesigned to DIN A4 two-column layout with Margensteuer notice
 
 ## Credentials (Test)
 - Admin: info@travel-events.de / admin123
