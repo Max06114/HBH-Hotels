@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -6,20 +6,15 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('hbh_admin_token'));
+  const [token, setToken] = useState(() => sessionStorage.getItem('hbh_admin_token'));
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (token) {
-      verifyToken();
-    } else {
+  const verifyToken = useCallback(async () => {
+    if (!token) {
       setLoading(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const verifyToken = async () => {
     try {
       const response = await axios.get(`${API}/admin/me`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -30,19 +25,23 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    verifyToken();
+  }, [verifyToken]);
 
   const login = async (email, password) => {
     const response = await axios.post(`${API}/admin/login`, { email, password });
     const { token: newToken, email: adminEmail } = response.data;
-    localStorage.setItem('hbh_admin_token', newToken);
+    sessionStorage.setItem('hbh_admin_token', newToken);
     setToken(newToken);
     setAdmin({ email: adminEmail });
     return true;
   };
 
   const logout = () => {
-    localStorage.removeItem('hbh_admin_token');
+    sessionStorage.removeItem('hbh_admin_token');
     setToken(null);
     setAdmin(null);
   };

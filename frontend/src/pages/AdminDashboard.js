@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, Routes, Route, useLocation } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -129,19 +129,18 @@ const DashboardOverview = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await axios.get(`${API}/admin/stats`, { headers: getAuthHeaders() });
+        setStats(response.data);
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await axios.get(`${API}/admin/stats`, { headers: getAuthHeaders() });
-      setStats(response.data);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [getAuthHeaders]);
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-[#6B1D2A]" /></div>;
@@ -159,8 +158,8 @@ const DashboardOverview = () => {
       <h1 className="font-serif text-3xl text-[#1A1A1A] mb-8">{t('adminDashboard')}</h1>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((stat, index) => (
-          <Card key={index} className="border-[#E5E0D5]">
+        {statCards.map((stat) => (
+          <Card key={stat.label} className="border-[#E5E0D5]">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -189,11 +188,7 @@ const BookingsManagement = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/admin/bookings`, { headers: getAuthHeaders() });
       setBookings(response.data);
@@ -202,7 +197,11 @@ const BookingsManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
 
   const handleExportCSV = async () => {
     setExporting(true);
@@ -963,8 +962,8 @@ const SchedulerManagement = () => {
               </TableHeader>
               <TableBody>
                 {schedulerStatus?.recent_runs?.length > 0 ? (
-                  schedulerStatus.recent_runs.map((run, idx) => (
-                    <TableRow key={idx}>
+                  schedulerStatus.recent_runs.map((run) => (
+                    <TableRow key={run.run_at}>
                       <TableCell>{new Date(run.run_at).toLocaleString('de-DE')}</TableCell>
                       <TableCell>{run.bookings_processed}</TableCell>
                       <TableCell className="text-green-600">{run.sent_count}</TableCell>

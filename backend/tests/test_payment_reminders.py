@@ -11,10 +11,10 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials
-ADMIN_EMAIL = "info@travel-events.de"
-ADMIN_PASSWORD = "admin123"
-TEST_BOOKING_ID = "4f013d95-c53a-45f1-926d-aa7db038d229"
+# Test credentials from environment
+ADMIN_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', 'info@travel-events.de')
+ADMIN_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', '')
+TEST_BOOKING_ID = os.environ.get('TEST_BOOKING_ID', '')
 
 
 @pytest.fixture(scope="module")

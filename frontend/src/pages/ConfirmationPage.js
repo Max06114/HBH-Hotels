@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
@@ -31,19 +31,7 @@ const ConfirmationPage = () => {
   const [pollCount, setPollCount] = useState(0);
   const [isRemainingPayment, setIsRemainingPayment] = useState(paymentType === 'remaining');
 
-  useEffect(() => {
-    if (paymentMethod === 'paypal' && bookingId) {
-      // PayPal return - need to capture the order
-      capturePayPalOrder();
-    } else if (sessionId) {
-      pollPaymentStatus();
-    } else {
-      setStatus('error');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, paymentMethod, bookingId]);
-
-  const capturePayPalOrder = async () => {
+  const capturePayPalOrder = useCallback(async () => {
     try {
       // Get the booking to find the PayPal order ID
       const bookingResponse = await axios.get(`${API}/bookings/${bookingId}`);
@@ -77,9 +65,9 @@ const ConfirmationPage = () => {
       console.error('Error capturing PayPal order:', error);
       setStatus('error');
     }
-  };
+  }, [bookingId, paymentType]);
 
-  const pollPaymentStatus = async () => {
+  const pollPaymentStatus = useCallback(async () => {
     const maxAttempts = 5;
     const pollInterval = 2000;
 
@@ -112,7 +100,18 @@ const ConfirmationPage = () => {
       console.error('Error checking payment status:', error);
       setStatus('error');
     }
-  };
+  }, [sessionId, bookingId, pollCount]);
+
+  useEffect(() => {
+    if (paymentMethod === 'paypal' && bookingId) {
+      // PayPal return - need to capture the order
+      capturePayPalOrder();
+    } else if (sessionId) {
+      pollPaymentStatus();
+    } else {
+      setStatus('error');
+    }
+  }, [paymentMethod, bookingId, sessionId, capturePayPalOrder, pollPaymentStatus]);
 
   const handleDownloadInvoice = async () => {
     if (!bookingId) return;

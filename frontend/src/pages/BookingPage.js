@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const PAYPAL_CLIENT_ID = 'AdEM1S0q9rhuwWjF2PpmTcDeykYwaQRpApCFmhJOEHxTNuLXGO0oGqPiR35AfdKHq69VqL6nqc8v6Uq_';
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || 'AdEM1S0q9rhuwWjF2PpmTcDeykYwaQRpApCFmhJOEHxTNuLXGO0oGqPiR35AfdKHq69VqL6nqc8v6Uq_';
 
 // German price format helper (comma as decimal separator)
 const formatPrice = (price) => {
@@ -53,12 +53,7 @@ const BookingPage = () => {
     notes: ''
   });
 
-  useEffect(() => {
-    fetchHotel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelId]);
-
-  const fetchHotel = async () => {
+  const fetchHotel = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/hotels/${hotelId}`);
       setHotel(response.data);
@@ -68,7 +63,11 @@ const BookingPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [hotelId, navigate, t]);
+
+  useEffect(() => {
+    fetchHotel();
+  }, [fetchHotel]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
