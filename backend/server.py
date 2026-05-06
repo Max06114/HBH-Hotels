@@ -21,7 +21,7 @@ import aiosmtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
+import stripe
 import requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -590,17 +590,26 @@ async def create_stripe_session(request: Request, booking_id: str, origin_url: s
     amount = booking["deposit_amount"] if payment_type == "deposit" else booking["remaining_amount"]
     
     api_key = os.environ.get('STRIPE_API_KEY')
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+    stripe.api_key = api_key
     
     success_url = f"{origin_url}/booking/confirmation?session_id={{CHECKOUT_SESSION_ID}}&booking_id={booking_id}"
     cancel_url = f"{origin_url}/booking/{booking_id}"
     
-    checkout_request = CheckoutSessionRequest(
-        amount=float(amount),
-        currency="eur",
+    # Create Stripe Checkout Session using native SDK
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "eur",
+                "product_data": {
+                    "name": f"Hotel Buchung - {'Anzahlung' if payment_type == 'deposit' else 'Restzahlung'}",
+                    "description": f"Buchungsnummer: {booking['booking_number']}"
+                },
+                "unit_amount": int(float(amount) * 100),  # Stripe expects cents
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={
@@ -610,12 +619,10 @@ async def create_stripe_session(request: Request, booking_id: str, origin_url: s
         }
     )
     
-    session = await stripe_checkout.create_checkout_session(checkout_request)
-    
     # Create payment transaction
     transaction = PaymentTransaction(
         booking_id=booking_id,
-        session_id=session.session_id,
+        session_id=session.id,
         payment_method="stripe",
         amount=float(amount),
         currency="EUR",
@@ -630,26 +637,26 @@ async def create_stripe_session(request: Request, booking_id: str, origin_url: s
     # Update booking
     await db.bookings.update_one(
         {"id": booking_id},
-        {"$set": {"stripe_session_id": session.session_id, "payment_method": "stripe"}}
+        {"$set": {"stripe_session_id": session.id, "payment_method": "stripe"}}
     )
     
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 @api_router.get("/payments/stripe/status/{session_id}")
 async def get_stripe_status(request: Request, session_id: str):
     api_key = os.environ.get('STRIPE_API_KEY')
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe.api_key = api_key
     
-    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
-    status = await stripe_checkout.get_checkout_status(session_id)
+    # Get session status using native Stripe SDK
+    session = stripe.checkout.Session.retrieve(session_id)
+    payment_status = session.payment_status  # 'paid', 'unpaid', 'no_payment_required'
     
     # Default values
     booking = None
     is_remaining_payment = False
     
     # Update transaction and booking
-    if status.payment_status == "paid":
+    if payment_status == "paid":
         # Check if this is a remaining balance payment
         booking = await db.bookings.find_one({"stripe_remaining_session_id": session_id}, {"_id": 0})
         is_remaining_payment = booking is not None
@@ -713,11 +720,11 @@ async def get_stripe_status(request: Request, session_id: str):
                         await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf")
     
     return {
-        "status": status.status,
-        "payment_status": status.payment_status,
-        "amount_total": status.amount_total,
-        "currency": status.currency,
-        "metadata": {"payment_type": "remaining" if booking and is_remaining_payment else "deposit"} if status.payment_status == "paid" else None
+        "status": session.status,
+        "payment_status": payment_status,
+        "amount_total": session.amount_total,
+        "currency": session.currency,
+        "metadata": {"payment_type": "remaining" if booking and is_remaining_payment else "deposit"} if payment_status == "paid" else None
     }
 
 @api_router.post("/webhook/stripe")
