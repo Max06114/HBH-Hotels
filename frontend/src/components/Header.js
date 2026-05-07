@@ -57,7 +57,7 @@ const Header = () => {
             </div>
             <div className="hidden sm:block">
               <span className="font-serif text-lg font-semibold text-[#6B1D2A]">Travel Events</span>
-              <p className="text-xs text-[#4A4A4A]">Happy Birthday Händel</p>
+              <p className="text-xs text-[#4A4A4A]">Happy Birthday Händel Hotel</p>
             </div>
           </Link>
 
