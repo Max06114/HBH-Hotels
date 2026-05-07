@@ -1689,6 +1689,25 @@ async def run_reminders_manually(admin: dict = Depends(get_current_admin)):
 
 # ============== SEED DATA ==============
 
+
+@api_router.post("/seed-admin")
+async def seed_admin():
+    """Create default admin user if not exists."""
+    existing = await db.admins.find_one({"email": "info@travel-events.de"})
+    if existing:
+        return {"message": "Admin already exists"}
+    
+    admin_doc = {
+        "id": str(uuid.uuid4()),
+        "email": "info@travel-events.de",
+        "password": hash_password("admin123"),
+        "name": "Admin",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.admins.insert_one(admin_doc)
+    return {"message": "Admin created successfully", "email": "info@travel-events.de"}
+
+
 @api_router.post("/seed-hotels")
 async def seed_hotels():
     existing = await db.hotels.count_documents({})
