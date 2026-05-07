@@ -131,45 +131,8 @@ const BookingPage = () => {
       return;
     }
 
-    setSubmitting(true);
-
-    try {
-      // Create booking
-      const bookingResponse = await axios.post(`${API}/bookings`, {
-        hotel_id: hotelId,
-        salutation: formData.salutation,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        email: formData.email,
-        street: formData.street,
-        postal_code: formData.postalCode,
-        city: formData.city,
-        country: formData.country,
-        room_type: formData.roomType,
-        check_in: format(checkIn, 'yyyy-MM-dd'),
-        check_out: format(checkOut, 'yyyy-MM-dd'),
-        notes: formData.notes,
-        language: language
-      });
-
-      const booking = bookingResponse.data.booking;
-
-      // Create Stripe session
-      const stripeResponse = await axios.post(`${API}/payments/stripe/create-session`, null, {
-        params: {
-          booking_id: booking.id,
-          origin_url: window.location.origin,
-          payment_type: 'deposit'
-        }
-      });
-
-      // Redirect to Stripe
-      window.location.href = stripeResponse.data.url;
-    } catch (error) {
-      console.error('Booking error:', error);
-      toast.error(language === 'de' ? 'Fehler bei der Buchung' : 'Booking error');
-      setSubmitting(false);
-    }
+    // Form is valid - PayPal button will handle the payment
+    toast.info(language === 'de' ? 'Bitte klicken Sie auf den PayPal-Button um zu bezahlen' : 'Please click the PayPal button to pay');
   };
 
   if (loading) {
@@ -418,29 +381,14 @@ const BookingPage = () => {
                       />
                     </div>
 
-                    {/* Submit */}
-                    <Button
-                      type="submit"
-                      disabled={submitting || !priceInfo}
-                      className="w-full bg-[#6B1D2A] hover:bg-[#8A2536] text-white py-6 rounded-full text-lg"
-                      data-testid="submit-booking-btn"
-                    >
-                      {submitting ? (
-                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      ) : (
-                        <CreditCard className="w-5 h-5 mr-2" />
-                      )}
-                      {t('payWithStripe')} {priceInfo && `(${formatPrice(priceInfo.deposit)} € ${t('deposit')})`}
-                    </Button>
-
-                    {/* PayPal Button */}
+                    {/* PayPal Button - Primary Payment Method */}
                     {priceInfo && (
-                      <div className="mt-4">
-                        <div className="relative flex items-center justify-center my-4">
-                          <div className="border-t border-[#E5E0D5] flex-grow"></div>
-                          <span className="px-4 text-sm text-[#4A4A4A]">{language === 'de' ? 'oder' : 'or'}</span>
-                          <div className="border-t border-[#E5E0D5] flex-grow"></div>
-                        </div>
+                      <div className="mt-2">
+                        <p className="text-center text-sm text-[#4A4A4A] mb-4">
+                          {language === 'de' 
+                            ? 'Bezahlen Sie sicher mit PayPal oder Kreditkarte:' 
+                            : 'Pay securely with PayPal or credit card:'}
+                        </p>
                         <PayPalScriptProvider options={{ 
                           clientId: PAYPAL_CLIENT_ID,
                           currency: "EUR",
@@ -448,7 +396,7 @@ const BookingPage = () => {
                         }}>
                           <PayPalButtons
                             style={{ 
-                              layout: "horizontal",
+                              layout: "vertical",
                               color: "blue",
                               shape: "pill",
                               label: "pay",
