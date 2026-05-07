@@ -467,6 +467,19 @@ const HotelsManagement = () => {
     }
   };
 
+  const handleToggleActive = async (hotel) => {
+    try {
+      await axios.put(`${API}/admin/hotels/${hotel.id}`, { ...hotel, active: !hotel.active }, { headers: getAuthHeaders() });
+      toast.success(hotel.active 
+        ? (language === 'de' ? 'Hotel deaktiviert' : 'Hotel deactivated')
+        : (language === 'de' ? 'Hotel aktiviert' : 'Hotel activated')
+      );
+      fetchHotels();
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Aktualisieren' : 'Error updating');
+    }
+  };
+
   const handleDelete = async (hotelId) => {
     if (!window.confirm(language === 'de' ? 'Hotel wirklich löschen?' : 'Really delete hotel?')) return;
     try {
@@ -516,6 +529,15 @@ const HotelsManagement = () => {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleToggleActive(hotel)}
+                  className={hotel.active ? 'text-orange-600' : 'text-green-600'}
+                  data-testid={`toggle-hotel-${hotel.id}`}
+                >
+                  {hotel.active ? (language === 'de' ? 'Deaktivieren' : 'Deactivate') : (language === 'de' ? 'Aktivieren' : 'Activate')}
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => handleEdit(hotel)} data-testid={`edit-hotel-${hotel.id}`}>
                   <Edit className="w-4 h-4 mr-1" /> {t('edit')}
                 </Button>
