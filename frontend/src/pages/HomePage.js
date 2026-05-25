@@ -132,11 +132,11 @@ const HomePage = () => {
             <p className="text-[#4A4A4A] leading-relaxed">
               {language === 'de' ? (
                 <>
-                  <strong className="text-[#6B1D2A]">Mit den folgenden Hotels haben wir die besten Preise ausgehandelt.</strong> Übernachtung ist möglich ab 89 € im geteilten Doppelzimmer im Hotel Ankerhof. <strong>Frühstück und Bettensteuer sind inklusive.</strong> Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.
+                  <strong className="text-[#6B1D2A]">Mit den folgenden Hotels haben wir die besten Preise ausgehandelt.</strong> Übernachtung ist möglich ab 89 € pro Person im geteilten Doppelzimmer im Hotel Ankerhof. <strong>Frühstück und Bettensteuer sind inklusive.</strong> Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.
                 </>
               ) : (
                 <>
-                  <strong className="text-[#6B1D2A]">We have negotiated the best prices with the following hotels.</strong> Accommodation is available from €89 in a shared double room at Hotel Ankerhof. <strong>Breakfast and city tax are included.</strong> All accommodations are within walking distance of the Händelhalle. Travel Events is the intermediary. A 25% deposit is required for reservation. The remainder is due 6 weeks before arrival. Free cancellation is possible up to one week before, then 50% up to one day before, after which 100% cancellation fees apply.
+                  <strong className="text-[#6B1D2A]">We have negotiated the best prices with the following hotels.</strong> Accommodation is available from €89 per person in a shared double room at Hotel Ankerhof. <strong>Breakfast and city tax are included.</strong> All accommodations are within walking distance of the Händelhalle. Travel Events is the intermediary. A 25% deposit is required for reservation. The remainder is due 6 weeks before arrival. Free cancellation is possible up to one week before, then 50% up to one day before, after which 100% cancellation fees apply.
                 </>
               )}
             </p>

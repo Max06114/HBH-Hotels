@@ -366,3 +366,98 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
     
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
     return subject, full_body
+
+
+
+def generate_arrival_reminder_email(booking: dict, hotel: dict, lang: str = "de") -> tuple:
+    """Generate arrival reminder email (1 week before check-in)."""
+    
+    if lang == "de":
+        subject = f"Ihre Anreise steht bevor - Happy Birthday Händel 2027"
+        title = "Erinnerung: Ihre Anreise steht bevor!"
+        
+        body = f"""
+                <p>Sehr geehrte/r {booking['salutation']} {booking['last_name']},</p>
+                
+                <p>in einer Woche ist es soweit! Wir freuen uns, Sie beim <strong>Happy Birthday Händel Festival 2027</strong> begrüßen zu dürfen.</p>
+                
+                <div class="highlight-box">
+                    <h3 style="margin-top: 0; color: #6B1D2A;">Ihre Buchungsübersicht</h3>
+                    <table class="info-table">
+                        <tr><td>Buchungsnummer:</td><td><strong>{booking['booking_number']}</strong></td></tr>
+                        <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
+                        <tr><td>Anreise:</td><td><strong>{booking['check_in']}</strong></td></tr>
+                        <tr><td>Abreise:</td><td>{booking['check_out']}</td></tr>
+                        <tr><td>Zimmertyp:</td><td>{booking.get('room_type', 'Standard')}</td></tr>
+                        <tr><td>Gesamtpreis:</td><td>{booking['total_price']:.2f} €</td></tr>
+                    </table>
+                </div>
+                
+                <div class="amount-box" style="background: #28a745;">
+                    <p style="margin: 0; font-size: 16px;">✓ Vollständig bezahlt</p>
+                </div>
+                
+                <div class="highlight-box">
+                    <h3 style="margin-top: 0; color: #6B1D2A;">Hoteladresse</h3>
+                    <p style="margin: 0; font-size: 16px;">
+                        <strong>{hotel['name']}</strong><br>
+                        {hotel.get('address', 'Halle (Saale)')}<br><br>
+                        <em>Entfernung zur Händelhalle: {hotel.get('distance_to_venue', 'Fußläufig erreichbar')}</em>
+                    </p>
+                </div>
+                
+                <p><strong>Wichtige Hinweise:</strong></p>
+                <ul>
+                    <li>Check-in ist ab 15:00 Uhr möglich</li>
+                    <li>Bitte zeigen Sie diese Buchungsbestätigung bei der Anreise vor</li>
+                    <li>Frühstück und Bettensteuer sind bereits inklusive</li>
+                </ul>
+                
+                <p>Wir wünschen Ihnen eine angenehme Anreise und ein wundervolles Festival!</p>
+        """
+    else:
+        subject = f"Your arrival is coming up - Happy Birthday Händel 2027"
+        title = "Reminder: Your Arrival is Coming Up!"
+        
+        body = f"""
+                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                
+                <p>In one week, it's time! We look forward to welcoming you at the <strong>Happy Birthday Händel Festival 2027</strong>.</p>
+                
+                <div class="highlight-box">
+                    <h3 style="margin-top: 0; color: #6B1D2A;">Your Booking Summary</h3>
+                    <table class="info-table">
+                        <tr><td>Booking Number:</td><td><strong>{booking['booking_number']}</strong></td></tr>
+                        <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
+                        <tr><td>Check-in:</td><td><strong>{booking['check_in']}</strong></td></tr>
+                        <tr><td>Check-out:</td><td>{booking['check_out']}</td></tr>
+                        <tr><td>Room Type:</td><td>{booking.get('room_type', 'Standard')}</td></tr>
+                        <tr><td>Total Price:</td><td>€{booking['total_price']:.2f}</td></tr>
+                    </table>
+                </div>
+                
+                <div class="amount-box" style="background: #28a745;">
+                    <p style="margin: 0; font-size: 16px;">✓ Fully Paid</p>
+                </div>
+                
+                <div class="highlight-box">
+                    <h3 style="margin-top: 0; color: #6B1D2A;">Hotel Address</h3>
+                    <p style="margin: 0; font-size: 16px;">
+                        <strong>{hotel['name']}</strong><br>
+                        {hotel.get('address', 'Halle (Saale)')}<br><br>
+                        <em>Distance to Händelhalle: {hotel.get('distance_to_venue_en', hotel.get('distance_to_venue', 'Walking distance'))}</em>
+                    </p>
+                </div>
+                
+                <p><strong>Important Notes:</strong></p>
+                <ul>
+                    <li>Check-in is available from 3:00 PM</li>
+                    <li>Please present this booking confirmation upon arrival</li>
+                    <li>Breakfast and city tax are already included</li>
+                </ul>
+                
+                <p>We wish you a pleasant journey and a wonderful festival!</p>
+        """
+    
+    full_body = get_email_header(title, lang) + body + get_email_footer(lang)
+    return subject, full_body
