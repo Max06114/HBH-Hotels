@@ -13,7 +13,8 @@ import {
   PaymentsManagement,
   RemindersManagement,
   SchedulerManagement,
-  ImageManager
+  ImageManager,
+  AnalyticsDashboard
 } from '../components/admin';
 
 // Main Admin Dashboard
@@ -54,6 +55,7 @@ const AdminDashboard = () => {
       <main className="md:ml-64 min-h-screen p-4 md:p-8 pt-20 md:pt-8">
         <Routes>
           <Route index element={<DashboardOverview />} />
+          <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="bookings" element={<BookingsManagement />} />
           <Route path="hotels" element={<HotelsManagement />} />
           <Route path="inventory" element={<InventoryManagement />} />

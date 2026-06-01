@@ -4,7 +4,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, 
-  Bell, Clock, Image as ImageIcon, Package, Music
+  Bell, Clock, Image as ImageIcon, Package, Music, BarChart3
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -15,6 +15,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const menuItems = [
     { path: '/admin', icon: LayoutDashboard, label: t('adminDashboard') },
+    { path: '/admin/analytics', icon: BarChart3, label: language === 'de' ? 'Analytics' : 'Analytics' },
     { path: '/admin/bookings', icon: CalendarCheck, label: t('adminBookings') },
     { path: '/admin/hotels', icon: Hotel, label: t('adminHotels') },
     { path: '/admin/inventory', icon: Package, label: language === 'de' ? 'Lagerhaltung' : 'Inventory' },
