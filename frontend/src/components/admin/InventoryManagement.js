@@ -80,7 +80,7 @@ const InventoryManagement = () => {
 
   const getRoomTypeLabel = (type, lang) => {
     const labels = {
-      de: { single: 'EZ', double: 'DZ', twin: 'Twin', standard_pool: 'Standard Pool', comfort_pool: 'Komfort Pool' },
+      de: { single: 'Einzelzimmer', double: 'Doppelzimmer', twin: 'Zweibettzimmer', standard_pool: 'Standard Pool', comfort_pool: 'Komfort Pool' },
       en: { single: 'Single', double: 'Double', twin: 'Twin', standard_pool: 'Standard Pool', comfort_pool: 'Comfort Pool' }
     };
     return labels[lang]?.[type] || type;

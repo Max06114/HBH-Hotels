@@ -45,7 +45,7 @@ const HOTEL_COORDS = {
   'b&b': [51.4817, 11.9656],
   'ankerhof': [51.4824, 11.9621],
   'dorint': [51.4799, 11.9811],
-  'niu': [51.4786, 11.9836],  // Riebeckplatz 10, direkt am Hauptbahnhof
+  'niu': [51.4795, 11.9820],  // Neben dem Dorint Hotel (Charlottenhof-Bereich)
 };
 
 // Get hotel position by name matching
