@@ -7,7 +7,7 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - Automatic invoicing (PDF generation and download) with email dispatch via Strato SMTP
 - Payment integration with PayPal (25% deposit at booking, 75% remaining 6 weeks before arrival)
 - Admin dashboard to manage hotel details, view bookings/payment statuses, and handle cancellations/refunds
-- Interactive map showing specific venues and hotels
+- Interactive map showing specific venues and hotels (incl. Niu Ridge)
 - Automated/Manual payment reminders with payment links
 - **Room Inventory Management (Lagerhaltung)** - Track available rooms per hotel
 - DE/EN language availability
@@ -81,6 +81,15 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Ankerhof: 10 EZ, 3 DZ, 2 Twin (fixed)
   - Dorint: 20 Standard Pool, 20 Comfort Pool (flexible)
 
+### Phase 7 - Code Refactoring (DONE - June 1, 2026)
+- [x] **AdminDashboard.js Split**: From ~1,550 lines to ~70 lines
+- [x] Created separate admin components in `/app/frontend/src/components/admin/`:
+  - Sidebar.js, DashboardOverview.js, BookingsManagement.js
+  - HotelsManagement.js, InventoryManagement.js, PaymentsManagement.js
+  - RemindersManagement.js, SchedulerManagement.js, ImageManager.js
+- [x] Index.js for clean exports
+- [x] Niu Ridge Hotel coordinates corrected (next to Dorint)
+
 ## Current Architecture
 
 ```
@@ -142,15 +151,21 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 
 ### P0 - Completed
 - [x] Room Inventory Management (Lagerhaltung)
+- [x] AdminDashboard.js Refactoring (Components split)
+- [x] Niu Ridge Hotel map coordinates
 
 ### P1 - Medium Priority
-- [ ] Further AdminDashboard.js component splitting (if needed)
+- [ ] BookingPage.js Refactoring (optional)
 
 ### P2 - Low Priority
 - [ ] Additional admin analytics/charts
-- [ ] Further BookingPage.js refactoring
 
 ## Changelog
+- **2026-06-01**: AdminDashboard.js Refactoring completed
+  - Split into 9 separate components in `/components/admin/`
+  - Main file reduced from ~1,550 to ~70 lines
+  - All admin functionality preserved
+- **2026-06-01**: Niu Ridge Hotel coordinates corrected (neben Dorint)
 - **2026-06-01**: Implemented Room Inventory Management (Lagerhaltung)
   - Added inventory tracking for all hotels
   - B&B Hotel: 10 EZ, 5 DZ, 5 Twin (fixed)
