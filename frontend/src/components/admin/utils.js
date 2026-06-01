@@ -89,9 +89,9 @@ export const getRoomTypeLabel = (roomType, language = 'de') => {
       single: 'Einzelzimmer',
       double: 'Doppelzimmer',
       twin: 'Zweibettzimmer',
-      single_comfort: 'EZ Komfort',
-      double_comfort: 'DZ Komfort',
-      twin_comfort: 'Zweibett Komfort'
+      single_comfort: 'Einzelzimmer Komfort',
+      double_comfort: 'Doppelzimmer Komfort',
+      twin_comfort: 'Zweibettzimmer Komfort'
     },
     en: {
       single: 'Single Room',

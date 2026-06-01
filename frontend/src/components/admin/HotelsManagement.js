@@ -147,9 +147,9 @@ const HotelsManagement = () => {
                   <h3 className="font-semibold text-lg">{hotel.name}</h3>
                   <p className="text-sm text-[#4A4A4A]">{hotel.address}</p>
                   <div className="mt-2 text-sm">
-                    <span className="text-[#6B1D2A] font-semibold">EZ: {hotel.single_price}€</span>
+                    <span className="text-[#6B1D2A] font-semibold">Einzelzimmer: {hotel.single_price}€</span>
                     <span className="mx-2">|</span>
-                    <span className="text-[#6B1D2A] font-semibold">DZ: {hotel.double_price}€</span>
+                    <span className="text-[#6B1D2A] font-semibold">Doppelzimmer: {hotel.double_price}€</span>
                   </div>
                   <Badge className={hotel.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
                     {hotel.active ? 'Aktiv' : 'Inaktiv'}

@@ -123,8 +123,8 @@ const HotelMap = ({ hotels = [] }) => {
                 <p className="text-xs text-[#4A4A4A] mb-2">{hotel.address}</p>
                 <p className="text-sm mb-2">{isDE ? hotel.distance_to_venue : hotel.distance_to_venue_en}</p>
                 <div className="flex gap-2 text-xs">
-                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">EZ: {hotel.single_price}€</span>
-                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">DZ: {hotel.double_price}€</span>
+                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">{isDE ? 'Einzelzimmer' : 'Single'}: {hotel.single_price}€</span>
+                  <span className="bg-[#F5F2EA] px-2 py-1 rounded">{isDE ? 'Doppelzimmer' : 'Double'}: {hotel.double_price}€</span>
                 </div>
               </div>
             </Popup>

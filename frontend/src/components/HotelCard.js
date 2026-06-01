@@ -141,16 +141,16 @@ const HotelCard = ({ hotel, index }) => {
               <p className="text-xs text-[#4A4A4A] font-medium mb-2">{language === 'de' ? 'Standard' : 'Standard'}</p>
               <div className="grid grid-cols-3 gap-2 text-sm mb-3">
                 <div>
-                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'EZ' : 'Single'}</span>
+                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Einzelzimmer' : 'Single'}</span>
                   <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.single_price)} €</p>
                 </div>
                 <div>
-                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'DZ' : 'Double'}</span>
+                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Doppelzimmer' : 'Double'}</span>
                   <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.double_price)} €</p>
                 </div>
                 {hotel.twin_price && (
                   <div>
-                    <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Twin' : 'Twin'}</span>
+                    <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Zweibettzimmer' : 'Twin'}</span>
                     <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.twin_price)} €</p>
                   </div>
                 )}
@@ -159,16 +159,16 @@ const HotelCard = ({ hotel, index }) => {
               <p className="text-xs text-[#4A4A4A] font-medium mb-2">{language === 'de' ? 'Comfort' : 'Comfort'}</p>
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div>
-                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'EZ' : 'Single'}</span>
+                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Einzelzimmer' : 'Single'}</span>
                   <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.single_comfort_price)} €</p>
                 </div>
                 <div>
-                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'DZ' : 'Double'}</span>
+                  <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Doppelzimmer' : 'Double'}</span>
                   <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.double_comfort_price)} €</p>
                 </div>
                 {hotel.twin_comfort_price && (
                   <div>
-                    <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Twin' : 'Twin'}</span>
+                    <span className="text-[#4A4A4A] text-xs">{language === 'de' ? 'Zweibettzimmer' : 'Twin'}</span>
                     <p className="font-semibold text-[#6B1D2A]">{formatPrice(hotel.twin_comfort_price)} €</p>
                   </div>
                 )}

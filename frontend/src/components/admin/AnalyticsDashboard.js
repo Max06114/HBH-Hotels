@@ -147,8 +147,8 @@ const AnalyticsDashboard = () => {
 
   const getRoomTypeName = (type) => {
     const names = {
-      de: { single: 'Einzelzimmer', double: 'Doppelzimmer', twin: 'Zweibett', 
-            single_comfort: 'EZ Komfort', double_comfort: 'DZ Komfort', twin_comfort: 'Twin Komfort' },
+      de: { single: 'Einzelzimmer', double: 'Doppelzimmer', twin: 'Zweibettzimmer', 
+            single_comfort: 'Einzelzimmer Komfort', double_comfort: 'Doppelzimmer Komfort', twin_comfort: 'Zweibettzimmer Komfort' },
       en: { single: 'Single', double: 'Double', twin: 'Twin',
             single_comfort: 'Single Comfort', double_comfort: 'Double Comfort', twin_comfort: 'Twin Comfort' }
     };

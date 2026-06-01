@@ -123,7 +123,7 @@ const InventoryManagement = () => {
           <p className="text-blue-800 text-sm">
             <strong>{language === 'de' ? 'Info:' : 'Info:'}</strong>{' '}
             {language === 'de' 
-              ? 'Das Inventar wird bei erfolgreicher Zahlung (Anzahlung) reduziert und bei Stornierung wieder erhöht. Pool-basierte Hotels (z.B. Dorint) können Zimmer flexibel als EZ, DZ oder Twin nutzen.'
+              ? 'Das Inventar wird bei erfolgreicher Zahlung (Anzahlung) reduziert und bei Stornierung wieder erhöht. Pool-basierte Hotels (z.B. Dorint) können Zimmer flexibel als Einzelzimmer, Doppelzimmer oder Zweibettzimmer nutzen.'
               : 'Inventory is decremented on successful payment (deposit) and restored on cancellation. Pool-based hotels (e.g., Dorint) can use rooms flexibly as single, double, or twin.'}
           </p>
         </CardContent>
@@ -180,7 +180,7 @@ const InventoryManagement = () => {
                         <TableRow className="bg-[#F5F2EA]/50">
                           <TableCell className="font-medium">
                             {language === 'de' ? 'Standard-Zimmer' : 'Standard Rooms'}
-                            <span className="text-xs text-[#4A4A4A] block">(EZ/DZ/Twin)</span>
+                            <span className="text-xs text-[#4A4A4A] block">(Einzelzimmer/Doppelzimmer/Zweibettzimmer)</span>
                           </TableCell>
                           <TableCell className="text-center">
                             {editingHotel === hotel.hotel_id ? (
@@ -207,7 +207,7 @@ const InventoryManagement = () => {
                         <TableRow>
                           <TableCell className="font-medium">
                             {language === 'de' ? 'Komfort-Zimmer' : 'Comfort Rooms'}
-                            <span className="text-xs text-[#4A4A4A] block">(EZ/DZ/Twin Komfort)</span>
+                            <span className="text-xs text-[#4A4A4A] block">(Einzelzimmer/Doppelzimmer/Zweibettzimmer Komfort)</span>
                           </TableCell>
                           <TableCell className="text-center">
                             {editingHotel === hotel.hotel_id ? (
