@@ -45,6 +45,7 @@ const HOTEL_COORDS = {
   'b&b': [51.4817, 11.9656],
   'ankerhof': [51.4824, 11.9621],
   'dorint': [51.4799, 11.9811],
+  'niu': [51.4773, 11.9871],  // Riebeckplatz 10, near Hauptbahnhof
 };
 
 // Get hotel position by name matching
@@ -53,6 +54,7 @@ const getHotelPosition = (hotelName) => {
   if (name.includes('b&b') || name.includes('b & b') || name.includes('bb hotel')) return HOTEL_COORDS['b&b'];
   if (name.includes('ankerhof')) return HOTEL_COORDS.ankerhof;
   if (name.includes('dorint') || name.includes('charlottenhof')) return HOTEL_COORDS.dorint;
+  if (name.includes('niu') || name.includes('ridge') || name.includes('holiday inn')) return HOTEL_COORDS.niu;
   return MAP_CENTER;
 };
 
