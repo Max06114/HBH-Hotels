@@ -7,6 +7,19 @@ from datetime import datetime, timezone
 import uuid
 
 
+class RoomInventory(BaseModel):
+    """Room inventory for a hotel. 
+    For flexible hotels (like Dorint), rooms can be used as single/double/twin from a pool.
+    """
+    # Fixed room types (B&B, Ankerhof style)
+    single: int = 0  # Dedicated single rooms
+    double: int = 0  # Dedicated double rooms
+    twin: int = 0    # Dedicated twin rooms
+    # Pool-based inventory (Dorint style - flexible usage)
+    standard_pool: int = 0  # Can be used as single, double, or twin
+    comfort_pool: int = 0   # Can be used as single_comfort, double_comfort, or twin_comfort
+
+
 class Hotel(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -30,6 +43,9 @@ class Hotel(BaseModel):
     double_comfort_price: Optional[float] = None
     twin_comfort_price: Optional[float] = None
     has_comfort_rooms: bool = False
+    # Inventory management
+    inventory: Optional[RoomInventory] = None
+    inventory_type: str = "fixed"  # "fixed" (dedicated rooms) or "pool" (flexible usage)
     breakfast_included: bool = True
     tax_included: bool = True
     active: bool = True
@@ -51,9 +67,24 @@ class HotelCreate(BaseModel):
     single_price: float
     double_price: float
     twin_price: Optional[float] = None
+    single_comfort_price: Optional[float] = None
+    double_comfort_price: Optional[float] = None
+    twin_comfort_price: Optional[float] = None
+    has_comfort_rooms: bool = False
+    inventory: Optional[Dict] = None
+    inventory_type: str = "fixed"
     breakfast_included: bool = True
     tax_included: bool = True
     active: bool = True
+
+
+class InventoryUpdate(BaseModel):
+    """Request model for updating hotel inventory"""
+    single: Optional[int] = None
+    double: Optional[int] = None
+    twin: Optional[int] = None
+    standard_pool: Optional[int] = None
+    comfort_pool: Optional[int] = None
 
 
 class Booking(BaseModel):

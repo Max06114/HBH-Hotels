@@ -36,6 +36,7 @@ const BookingPage = () => {
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [availability, setAvailability] = useState(null);
   // Default dates: 25.02.2027 - 28.02.2027
   const [checkIn, setCheckIn] = useState(new Date(2027, 1, 25)); // February is month 1 (0-indexed)
   const [checkOut, setCheckOut] = useState(new Date(2027, 1, 28));
@@ -55,8 +56,12 @@ const BookingPage = () => {
 
   const fetchHotel = useCallback(async () => {
     try {
-      const response = await axios.get(`${API}/hotels/${hotelId}`);
-      setHotel(response.data);
+      const [hotelRes, availRes] = await Promise.all([
+        axios.get(`${API}/hotels/${hotelId}`),
+        axios.get(`${API}/hotels/${hotelId}/availability`)
+      ]);
+      setHotel(hotelRes.data);
+      setAvailability(availRes.data.availability);
     } catch (error) {
       toast.error(t('error'));
       navigate('/');
@@ -196,31 +201,43 @@ const BookingPage = () => {
                           </SelectTrigger>
                           <SelectContent>
                             {/* Standard rooms */}
-                            <SelectItem value="single">
+                            <SelectItem value="single" disabled={availability?.single === 0}>
                               {language === 'de' ? 'Einzelzimmer Standard' : 'Single Room Standard'} - {formatPrice(hotel.single_price)} €
+                              {availability?.single === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                              {availability?.single > 0 && availability?.single <= 3 && <span className="text-orange-600 ml-2">({availability?.single} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                             </SelectItem>
-                            <SelectItem value="double">
+                            <SelectItem value="double" disabled={availability?.double === 0}>
                               {language === 'de' ? 'Doppelzimmer Standard' : 'Double Room Standard'} - {formatPrice(hotel.double_price)} €
+                              {availability?.double === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                              {availability?.double > 0 && availability?.double <= 3 && <span className="text-orange-600 ml-2">({availability?.double} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                             </SelectItem>
                             {hotel.twin_price && (
-                              <SelectItem value="twin">
+                              <SelectItem value="twin" disabled={availability?.twin === 0}>
                                 {language === 'de' ? 'Zweibettzimmer Standard' : 'Twin Room Standard'} - {formatPrice(hotel.twin_price)} €
+                                {availability?.twin === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                                {availability?.twin > 0 && availability?.twin <= 3 && <span className="text-orange-600 ml-2">({availability?.twin} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                               </SelectItem>
                             )}
                             {/* Comfort rooms (if available) */}
                             {hotel.has_comfort_rooms && hotel.single_comfort_price && (
-                              <SelectItem value="single_comfort">
+                              <SelectItem value="single_comfort" disabled={availability?.single_comfort === 0}>
                                 {language === 'de' ? 'Einzelzimmer Comfort' : 'Single Room Comfort'} - {formatPrice(hotel.single_comfort_price)} €
+                                {availability?.single_comfort === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                                {availability?.single_comfort > 0 && availability?.single_comfort <= 3 && <span className="text-orange-600 ml-2">({availability?.single_comfort} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                               </SelectItem>
                             )}
                             {hotel.has_comfort_rooms && hotel.double_comfort_price && (
-                              <SelectItem value="double_comfort">
+                              <SelectItem value="double_comfort" disabled={availability?.double_comfort === 0}>
                                 {language === 'de' ? 'Doppelzimmer Comfort' : 'Double Room Comfort'} - {formatPrice(hotel.double_comfort_price)} €
+                                {availability?.double_comfort === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                                {availability?.double_comfort > 0 && availability?.double_comfort <= 3 && <span className="text-orange-600 ml-2">({availability?.double_comfort} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                               </SelectItem>
                             )}
                             {hotel.has_comfort_rooms && hotel.twin_comfort_price && (
-                              <SelectItem value="twin_comfort">
+                              <SelectItem value="twin_comfort" disabled={availability?.twin_comfort === 0}>
                                 {language === 'de' ? 'Zweibettzimmer Comfort' : 'Twin Room Comfort'} - {formatPrice(hotel.twin_comfort_price)} €
+                                {availability?.twin_comfort === 0 && <span className="text-red-600 ml-2">{language === 'de' ? '(ausgebucht)' : '(sold out)'}</span>}
+                                {availability?.twin_comfort > 0 && availability?.twin_comfort <= 3 && <span className="text-orange-600 ml-2">({availability?.twin_comfort} {language === 'de' ? 'verfügbar' : 'available'})</span>}
                               </SelectItem>
                             )}
                           </SelectContent>

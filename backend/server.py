@@ -32,7 +32,7 @@ from models import (
     Hotel, HotelCreate, Booking, BookingCreate, 
     PaymentTransaction, AdminUser, AdminLogin, AdminCreate,
     PayPalCaptureRequest, ImageUploadResponse, ImageRenameRequest,
-    PayPalOrderRequest
+    PayPalOrderRequest, RoomInventory, InventoryUpdate
 )
 
 # Import email templates
@@ -244,7 +244,92 @@ def get_room_price(hotel: dict, room_type: str) -> float:
         return hotel["double_price"]
     elif room_type == "twin":
         return hotel.get("twin_price") or hotel["double_price"]
+    elif room_type == "single_comfort":
+        return hotel.get("single_comfort_price") or hotel["single_price"]
+    elif room_type == "double_comfort":
+        return hotel.get("double_comfort_price") or hotel["double_price"]
+    elif room_type == "twin_comfort":
+        return hotel.get("twin_comfort_price") or hotel.get("twin_price") or hotel["double_price"]
     return hotel["single_price"]
+
+# ============== INVENTORY HELPERS ==============
+
+def get_inventory_key_for_room_type(hotel: dict, room_type: str) -> str:
+    """
+    Determine which inventory key to decrement based on room type and hotel inventory type.
+    For pool-based hotels (Dorint), single/double/twin use standard_pool, comfort variants use comfort_pool.
+    For fixed hotels (B&B, Ankerhof), use dedicated keys.
+    """
+    inventory_type = hotel.get("inventory_type", "fixed")
+    
+    if inventory_type == "pool":
+        # Pool-based: comfort rooms use comfort_pool, standard use standard_pool
+        if room_type in ["single_comfort", "double_comfort", "twin_comfort"]:
+            return "comfort_pool"
+        else:
+            return "standard_pool"
+    else:
+        # Fixed inventory: map to dedicated room type
+        mapping = {
+            "single": "single",
+            "double": "double",
+            "twin": "twin",
+            "single_comfort": "single",  # Fallback for fixed hotels without comfort
+            "double_comfort": "double",
+            "twin_comfort": "twin"
+        }
+        return mapping.get(room_type, "single")
+
+def check_room_availability(hotel: dict, room_type: str) -> tuple:
+    """
+    Check if a room type is available in the hotel inventory.
+    Returns (is_available: bool, available_count: int)
+    """
+    inventory = hotel.get("inventory")
+    if not inventory:
+        # No inventory tracking - unlimited availability
+        return (True, -1)
+    
+    inv_key = get_inventory_key_for_room_type(hotel, room_type)
+    available = inventory.get(inv_key, 0)
+    
+    return (available > 0, available)
+
+async def decrement_inventory(hotel_id: str, room_type: str) -> bool:
+    """Decrement inventory for a room type after successful booking."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel or not hotel.get("inventory"):
+        return True  # No inventory tracking
+    
+    inv_key = get_inventory_key_for_room_type(hotel, room_type)
+    current = hotel["inventory"].get(inv_key, 0)
+    
+    if current <= 0:
+        return False  # No rooms available
+    
+    # Decrement the inventory
+    await db.hotels.update_one(
+        {"id": hotel_id},
+        {"$inc": {f"inventory.{inv_key}": -1}}
+    )
+    logger.info(f"Decremented {inv_key} inventory for hotel {hotel_id}: {current} -> {current - 1}")
+    return True
+
+async def increment_inventory(hotel_id: str, room_type: str) -> bool:
+    """Increment inventory for a room type after cancellation."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel or not hotel.get("inventory"):
+        return True  # No inventory tracking
+    
+    inv_key = get_inventory_key_for_room_type(hotel, room_type)
+    
+    # Increment the inventory
+    await db.hotels.update_one(
+        {"id": hotel_id},
+        {"$inc": {f"inventory.{inv_key}": 1}}
+    )
+    logger.info(f"Incremented {inv_key} inventory for hotel {hotel_id} (cancellation)")
+    return True
 
 async def generate_invoice_number() -> str:
     count = await db.bookings.count_documents({})
@@ -515,11 +600,71 @@ async def get_hotel(hotel_id: str):
         raise HTTPException(status_code=404, detail="Hotel not found")
     return hotel
 
+@api_router.get("/hotels/{hotel_id}/availability")
+async def get_hotel_availability(hotel_id: str):
+    """Get room availability for a hotel."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    inventory = hotel.get("inventory", {})
+    inventory_type = hotel.get("inventory_type", "fixed")
+    
+    # Calculate availability for each room type
+    availability = {}
+    
+    if inventory_type == "pool":
+        # Pool-based hotel (e.g., Dorint)
+        standard_available = inventory.get("standard_pool", 0)
+        comfort_available = inventory.get("comfort_pool", 0)
+        
+        availability = {
+            "single": standard_available,
+            "double": standard_available,
+            "twin": standard_available,
+            "single_comfort": comfort_available,
+            "double_comfort": comfort_available,
+            "twin_comfort": comfort_available,
+            "inventory_type": "pool",
+            "standard_pool": standard_available,
+            "comfort_pool": comfort_available
+        }
+    else:
+        # Fixed inventory (e.g., B&B, Ankerhof)
+        availability = {
+            "single": inventory.get("single", 0),
+            "double": inventory.get("double", 0),
+            "twin": inventory.get("twin", 0),
+            "single_comfort": 0,
+            "double_comfort": 0,
+            "twin_comfort": 0,
+            "inventory_type": "fixed"
+        }
+    
+    return {
+        "hotel_id": hotel_id,
+        "hotel_name": hotel["name"],
+        "availability": availability,
+        "has_inventory": bool(inventory)
+    }
+
 @api_router.post("/bookings")
 async def create_booking(booking_data: BookingCreate):
     hotel = await db.hotels.find_one({"id": booking_data.hotel_id}, {"_id": 0})
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    # Check room availability
+    is_available, count = check_room_availability(hotel, booking_data.room_type)
+    if not is_available:
+        room_type_names = {
+            "single": "Einzelzimmer", "double": "Doppelzimmer", "twin": "Zweibettzimmer",
+            "single_comfort": "Einzelzimmer Komfort", "double_comfort": "Doppelzimmer Komfort", "twin_comfort": "Zweibettzimmer Komfort"
+        }
+        raise HTTPException(
+            status_code=400, 
+            detail=f"{room_type_names.get(booking_data.room_type, booking_data.room_type)} ist ausgebucht / Room type is sold out"
+        )
     
     nights = calculate_nights(booking_data.check_in, booking_data.check_out)
     if nights <= 0:
@@ -912,11 +1057,17 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
             # Check for deposit payment
             booking = await db.bookings.find_one({"paypal_order_id": capture_data.order_id}, {"_id": 0})
             if booking:
+                # Decrement inventory on successful deposit payment
+                inventory_decremented = await decrement_inventory(booking["hotel_id"], booking["room_type"])
+                if not inventory_decremented:
+                    logger.warning(f"Failed to decrement inventory for booking {booking['id']}")
+                
                 await db.bookings.update_one(
                     {"id": booking["id"]},
                     {"$set": {
                         "payment_status": "deposit_paid",
                         "paypal_capture_id": capture["purchase_units"][0]["payments"]["captures"][0]["id"],
+                        "inventory_decremented": inventory_decremented,
                         "updated_at": datetime.now(timezone.utc).isoformat()
                     }}
                 )
@@ -1051,6 +1202,11 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
+    
+    # Restore inventory if booking was paid (inventory was decremented)
+    if booking.get('inventory_decremented') or booking.get('payment_status') in ['deposit_paid', 'fully_paid']:
+        await increment_inventory(booking["hotel_id"], booking["room_type"])
+        logger.info(f"Restored inventory for cancelled booking {booking_id}")
     
     # Send cancellation email with refund info
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
@@ -1208,6 +1364,118 @@ async def admin_delete_hotel(hotel_id: str, admin: dict = Depends(get_current_ad
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Hotel not found")
     return {"message": "Hotel deleted successfully"}
+
+# ============== ADMIN INVENTORY MANAGEMENT ==============
+
+@api_router.get("/admin/inventory")
+async def admin_get_all_inventory(admin: dict = Depends(get_current_admin)):
+    """Get inventory overview for all hotels."""
+    hotels = await db.hotels.find({}, {"_id": 0}).to_list(100)
+    
+    inventory_overview = []
+    for hotel in hotels:
+        inventory = hotel.get("inventory", {})
+        inventory_type = hotel.get("inventory_type", "fixed")
+        
+        # Count booked rooms (non-cancelled bookings)
+        booked_counts = {}
+        bookings = await db.bookings.find({
+            "hotel_id": hotel["id"],
+            "payment_status": {"$in": ["deposit_paid", "fully_paid"]}
+        }, {"room_type": 1, "_id": 0}).to_list(1000)
+        
+        for b in bookings:
+            rt = b.get("room_type", "single")
+            booked_counts[rt] = booked_counts.get(rt, 0) + 1
+        
+        inventory_overview.append({
+            "hotel_id": hotel["id"],
+            "hotel_name": hotel["name"],
+            "inventory_type": inventory_type,
+            "inventory": inventory,
+            "booked": booked_counts,
+            "active": hotel.get("active", True)
+        })
+    
+    return {"hotels": inventory_overview}
+
+@api_router.get("/admin/inventory/{hotel_id}")
+async def admin_get_hotel_inventory(hotel_id: str, admin: dict = Depends(get_current_admin)):
+    """Get detailed inventory for a specific hotel."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    inventory = hotel.get("inventory", {})
+    inventory_type = hotel.get("inventory_type", "fixed")
+    
+    # Count booked rooms by type
+    pipeline = [
+        {"$match": {"hotel_id": hotel_id, "payment_status": {"$in": ["deposit_paid", "fully_paid"]}}},
+        {"$group": {"_id": "$room_type", "count": {"$sum": 1}}}
+    ]
+    booked_result = await db.bookings.aggregate(pipeline).to_list(20)
+    booked = {item["_id"]: item["count"] for item in booked_result}
+    
+    return {
+        "hotel_id": hotel_id,
+        "hotel_name": hotel["name"],
+        "inventory_type": inventory_type,
+        "inventory": inventory,
+        "booked": booked
+    }
+
+@api_router.put("/admin/inventory/{hotel_id}")
+async def admin_update_inventory(hotel_id: str, inventory_data: InventoryUpdate, admin: dict = Depends(get_current_admin)):
+    """Update inventory for a hotel."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    current_inventory = hotel.get("inventory", {})
+    
+    # Update only provided fields
+    update_fields = {}
+    if inventory_data.single is not None:
+        update_fields["inventory.single"] = inventory_data.single
+    if inventory_data.double is not None:
+        update_fields["inventory.double"] = inventory_data.double
+    if inventory_data.twin is not None:
+        update_fields["inventory.twin"] = inventory_data.twin
+    if inventory_data.standard_pool is not None:
+        update_fields["inventory.standard_pool"] = inventory_data.standard_pool
+    if inventory_data.comfort_pool is not None:
+        update_fields["inventory.comfort_pool"] = inventory_data.comfort_pool
+    
+    if update_fields:
+        await db.hotels.update_one(
+            {"id": hotel_id},
+            {"$set": update_fields}
+        )
+        logger.info(f"Updated inventory for hotel {hotel_id}: {update_fields}")
+    
+    # Return updated hotel
+    updated_hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    return {
+        "message": "Inventory updated successfully",
+        "hotel_id": hotel_id,
+        "inventory": updated_hotel.get("inventory", {})
+    }
+
+@api_router.put("/admin/hotels/{hotel_id}/inventory-type")
+async def admin_set_inventory_type(hotel_id: str, inventory_type: str, admin: dict = Depends(get_current_admin)):
+    """Set the inventory type for a hotel (fixed or pool)."""
+    if inventory_type not in ["fixed", "pool"]:
+        raise HTTPException(status_code=400, detail="inventory_type must be 'fixed' or 'pool'")
+    
+    result = await db.hotels.update_one(
+        {"id": hotel_id},
+        {"$set": {"inventory_type": inventory_type}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    
+    return {"message": f"Inventory type set to {inventory_type}", "hotel_id": hotel_id}
 
 # ============== ADMIN BOOKING MANAGEMENT ==============
 
@@ -1961,6 +2229,64 @@ async def admin_update_hotel_images(
         )
     
     return {"message": "Hotel images updated", "images": image_urls}
+
+@api_router.post("/admin/seed-inventory")
+async def seed_inventory(admin: dict = Depends(get_current_admin)):
+    """Seed initial inventory data for all hotels based on contracted room counts."""
+    
+    # Define inventory by hotel name pattern
+    inventory_config = {
+        "niu Ridge": {
+            "inventory_type": "fixed",
+            "inventory": {"single": 0, "double": 0, "twin": 0}  # Nur französische Betten
+        },
+        "B&B": {
+            "inventory_type": "fixed",
+            "inventory": {"single": 10, "double": 5, "twin": 5}  # 10 EZ, 5 DZ, 5 Twin
+        },
+        "Ankerhof": {
+            "inventory_type": "fixed",
+            "inventory": {"single": 10, "double": 3, "twin": 2}  # 10 EZ, 3 DZ, 2 Twin
+        },
+        "Dorint": {
+            "inventory_type": "pool",
+            "inventory": {"standard_pool": 20, "comfort_pool": 20, "single": 0, "double": 0, "twin": 0}
+        },
+        "Rotes Ross": {
+            "inventory_type": "fixed",
+            "inventory": {"single": 0, "double": 0, "twin": 0}  # Nicht im Kontingent
+        }
+    }
+    
+    updated = []
+    hotels = await db.hotels.find({}, {"_id": 0}).to_list(100)
+    
+    for hotel in hotels:
+        hotel_name = hotel.get("name", "")
+        config = None
+        
+        # Match hotel by name pattern
+        for pattern, cfg in inventory_config.items():
+            if pattern.lower() in hotel_name.lower():
+                config = cfg
+                break
+        
+        if config:
+            await db.hotels.update_one(
+                {"id": hotel["id"]},
+                {"$set": {
+                    "inventory": config["inventory"],
+                    "inventory_type": config["inventory_type"]
+                }}
+            )
+            updated.append({
+                "hotel": hotel_name,
+                "inventory_type": config["inventory_type"],
+                "inventory": config["inventory"]
+            })
+            logger.info(f"Updated inventory for {hotel_name}: {config}")
+    
+    return {"message": "Inventory seeded successfully", "updated": updated}
 
 # Include router and middleware
 app.include_router(api_router)
