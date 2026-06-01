@@ -341,13 +341,10 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     styles = getSampleStyleSheet()
     
     # Custom styles
-    company_style = ParagraphStyle('Company', parent=styles['Normal'], fontSize=11, fontName='Helvetica-Bold', textColor=colors.HexColor('#6B1D2A'))
     address_style = ParagraphStyle('Address', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#4A4A4A'), leading=12)
     title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, spaceAfter=5, textColor=colors.HexColor('#6B1D2A'), fontName='Helvetica-Bold')
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#666666'))
     section_style = ParagraphStyle('Section', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#1A1A1A'), spaceBefore=15, spaceAfter=8)
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=9, leading=14)
-    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#666666'), leading=11)
     italic_style = ParagraphStyle('Italic', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#666666'), fontName='Helvetica-Oblique')
     thank_style = ParagraphStyle('Thank', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#6B1D2A'), spaceBefore=20)
     
@@ -874,8 +871,9 @@ async def get_stripe_status(request: Request, session_id: str):
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    body = await request.body()
-    logger.info("Stripe webhook received")
+    # Stripe webhook placeholder (Stripe removed, PayPal only)
+    _ = await request.body()  # Read body to complete request
+    logger.info("Stripe webhook received (deprecated)")
     return {"status": "received"}
 
 # ============== PAYPAL PAYMENTS ==============
@@ -1432,8 +1430,6 @@ async def admin_update_inventory(hotel_id: str, inventory_data: InventoryUpdate,
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
     
-    current_inventory = hotel.get("inventory", {})
-    
     # Update only provided fields
     update_fields = {}
     if inventory_data.single is not None:
@@ -1911,7 +1907,6 @@ async def admin_get_pending_reminders(admin: dict = Depends(get_current_admin)):
     }, {"_id": 0}).to_list(100)
     
     # Calculate which ones are within 6 weeks of check-in
-    six_weeks_from_now = datetime.now(timezone.utc) + timedelta(weeks=6)
     pending = []
     
     for booking in bookings:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
@@ -29,11 +29,7 @@ const HotelsManagement = () => {
     breakfast_included: true, tax_included: true, active: true
   });
 
-  useEffect(() => {
-    fetchHotels();
-  }, []);
-
-  const fetchHotels = async () => {
+  const fetchHotels = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/admin/hotels`, { headers: getAuthHeaders() });
       setHotels(response.data);
@@ -42,7 +38,11 @@ const HotelsManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchHotels();
+  }, [fetchHotels]);
 
   const handleEdit = (hotel) => {
     setEditingHotel(hotel);

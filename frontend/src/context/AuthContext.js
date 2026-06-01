@@ -10,6 +10,12 @@ export const AuthProvider = ({ children }) => {
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    sessionStorage.removeItem('hbh_admin_token');
+    setToken(null);
+    setAdmin(null);
+  }, []);
+
   const verifyToken = useCallback(async () => {
     if (!token) {
       setLoading(false);
@@ -25,7 +31,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, logout]);
 
   useEffect(() => {
     verifyToken();
@@ -40,15 +46,9 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
-  const logout = () => {
-    sessionStorage.removeItem('hbh_admin_token');
-    setToken(null);
-    setAdmin(null);
-  };
-
-  const getAuthHeaders = () => ({
+  const getAuthHeaders = useCallback(() => ({
     Authorization: `Bearer ${token}`
-  });
+  }), [token]);
 
   return (
     <AuthContext.Provider value={{ token, admin, loading, login, logout, getAuthHeaders, isAuthenticated: !!token }}>

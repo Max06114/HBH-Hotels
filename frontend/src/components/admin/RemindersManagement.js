@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
@@ -24,11 +24,7 @@ const RemindersManagement = () => {
   const [sending, setSending] = useState(false);
   const [sendingSingle, setSendingSingle] = useState(null);
 
-  useEffect(() => {
-    fetchPendingReminders();
-  }, []);
-
-  const fetchPendingReminders = async () => {
+  const fetchPendingReminders = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/admin/pending-reminders`, { headers: getAuthHeaders() });
       setPendingReminders(response.data.pending_reminders || []);
@@ -37,7 +33,11 @@ const RemindersManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchPendingReminders();
+  }, [fetchPendingReminders]);
 
   const handleSendReminders = async () => {
     setSending(true);

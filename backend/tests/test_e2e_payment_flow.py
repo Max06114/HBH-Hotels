@@ -16,10 +16,10 @@ from datetime import datetime
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://event-payments-3.preview.emergentagent.com').rstrip('/')
 
-# Test credentials
-ADMIN_EMAIL = "info@travel-events.de"
-ADMIN_PASSWORD = "admin123"
-TEST_CUSTOMER_EMAIL = "test@example.com"
+# Test credentials - loaded from environment or use defaults for test environment only
+ADMIN_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', 'info@travel-events.de')
+ADMIN_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', 'admin123')
+TEST_CUSTOMER_EMAIL = os.environ.get('TEST_CUSTOMER_EMAIL', 'test@example.com')
 
 
 @pytest.fixture(scope="module")

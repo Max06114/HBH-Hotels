@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
@@ -17,11 +17,7 @@ const SchedulerManagement = () => {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
 
-  useEffect(() => {
-    fetchSchedulerStatus();
-  }, []);
-
-  const fetchSchedulerStatus = async () => {
+  const fetchSchedulerStatus = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/admin/scheduler/status`, { headers: getAuthHeaders() });
       setSchedulerStatus(response.data);
@@ -30,7 +26,11 @@ const SchedulerManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchSchedulerStatus();
+  }, [fetchSchedulerStatus]);
 
   const handleRunReminders = async () => {
     setRunning(true);
