@@ -590,19 +590,37 @@ async def get_hotels():
     hotels = await db.hotels.find({"active": True}, {"_id": 0}).sort("sort_order", 1).to_list(100)
     return hotels
 
+@api_router.get("/debug/hotels-ids")
+async def debug_hotel_ids():
+    """Debug endpoint to check hotel IDs in database."""
+    hotels = await db.hotels.find({}, {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(100)
+    return {"hotels": hotels, "count": len(hotels)}
+
 @api_router.get("/hotels/{hotel_id}")
 async def get_hotel(hotel_id: str):
+    # First try to find by id
     hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
     if not hotel:
-        raise HTTPException(status_code=404, detail="Hotel not found")
+        # Fallback: try URL-decoded hotel_id (in case of encoded characters)
+        from urllib.parse import unquote
+        decoded_id = unquote(hotel_id)
+        hotel = await db.hotels.find_one({"id": decoded_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail=f"Hotel not found: {hotel_id}")
     return hotel
 
 @api_router.get("/hotels/{hotel_id}/availability")
 async def get_hotel_availability(hotel_id: str):
     """Get room availability for a hotel."""
+    from urllib.parse import unquote
+    
     hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
     if not hotel:
-        raise HTTPException(status_code=404, detail="Hotel not found")
+        # Fallback: try URL-decoded hotel_id
+        decoded_id = unquote(hotel_id)
+        hotel = await db.hotels.find_one({"id": decoded_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail=f"Hotel not found: {hotel_id}")
     
     inventory = hotel.get("inventory", {})
     inventory_type = hotel.get("inventory_type", "fixed")
