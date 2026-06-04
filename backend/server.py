@@ -32,7 +32,7 @@ from models import (
     Hotel, HotelCreate, Booking, BookingCreate, 
     PaymentTransaction, AdminUser, AdminLogin, AdminCreate,
     PayPalCaptureRequest, ImageUploadResponse, ImageRenameRequest,
-    PayPalOrderRequest, RoomInventory, InventoryUpdate
+    PayPalOrderRequest, RoomInventory, InventoryUpdate, HotelReorderRequest
 )
 
 # Import email templates
@@ -1333,6 +1333,17 @@ async def get_admin_me(admin: dict = Depends(get_current_admin)):
 
 # ============== ADMIN HOTEL MANAGEMENT ==============
 
+@api_router.put("/admin/hotels/reorder")
+async def admin_reorder_hotels(data: HotelReorderRequest, admin: dict = Depends(get_current_admin)):
+    """Reorder hotels by updating their sort_order."""
+    for item in data.hotels:
+        await db.hotels.update_one(
+            {"id": item.id},
+            {"$set": {"sort_order": item.sort_order}}
+        )
+    
+    return {"message": "Hotels reordered successfully"}
+
 @api_router.get("/admin/hotels", response_model=List[Hotel])
 async def admin_get_hotels(admin: dict = Depends(get_current_admin)):
     hotels = await db.hotels.find({}, {"_id": 0}).to_list(100)
@@ -1544,21 +1555,6 @@ async def update_intro_text(data: dict, admin: dict = Depends(get_current_admin)
         upsert=True
     )
     return {"message": "Intro text updated successfully"}
-
-# ============== ADMIN HOTEL SORTING ==============
-
-@api_router.put("/admin/hotels/reorder")
-async def admin_reorder_hotels(data: dict, admin: dict = Depends(get_current_admin)):
-    """Reorder hotels by updating their sort_order."""
-    hotel_orders = data.get("hotels", [])  # List of {id, sort_order}
-    
-    for item in hotel_orders:
-        await db.hotels.update_one(
-            {"id": item["id"]},
-            {"$set": {"sort_order": item["sort_order"]}}
-        )
-    
-    return {"message": "Hotels reordered successfully"}
 
 # ============== ADMIN STATS ==============
 

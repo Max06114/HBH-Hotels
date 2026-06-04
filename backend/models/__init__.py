@@ -87,6 +87,17 @@ class InventoryUpdate(BaseModel):
     comfort_pool: Optional[int] = None
 
 
+class HotelOrderItem(BaseModel):
+    """Single hotel order item for reordering"""
+    id: str
+    sort_order: int
+
+
+class HotelReorderRequest(BaseModel):
+    """Request model for reordering hotels"""
+    hotels: List[HotelOrderItem]
+
+
 class Booking(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
