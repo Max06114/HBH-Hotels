@@ -4,7 +4,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, 
-  Bell, Clock, Image as ImageIcon, Package, Music, BarChart3
+  Bell, Clock, Image as ImageIcon, Package, Music, BarChart3, FileText
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -19,6 +19,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { path: '/admin/bookings', icon: CalendarCheck, label: t('adminBookings') },
     { path: '/admin/hotels', icon: Hotel, label: t('adminHotels') },
     { path: '/admin/inventory', icon: Package, label: language === 'de' ? 'Lagerhaltung' : 'Inventory' },
+    { path: '/admin/content', icon: FileText, label: language === 'de' ? 'Inhalte' : 'Content' },
     { path: '/admin/images', icon: ImageIcon, label: language === 'de' ? 'Bildmanager' : 'Image Manager' },
     { path: '/admin/payments', icon: CreditCard, label: t('adminPayments') },
     { path: '/admin/reminders', icon: Bell, label: language === 'de' ? 'Erinnerungen' : 'Reminders' },

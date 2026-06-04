@@ -587,7 +587,7 @@ async def root():
 
 @api_router.get("/hotels", response_model=List[Hotel])
 async def get_hotels():
-    hotels = await db.hotels.find({"active": True}, {"_id": 0}).to_list(100)
+    hotels = await db.hotels.find({"active": True}, {"_id": 0}).sort("sort_order", 1).to_list(100)
     return hotels
 
 @api_router.get("/hotels/{hotel_id}")
@@ -1518,6 +1518,48 @@ async def admin_get_payments(admin: dict = Depends(get_current_admin)):
     payments = await db.payment_transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return payments
 
+# ============== SETTINGS (Intro Text) ==============
+
+@api_router.get("/settings/intro-text")
+async def get_intro_text():
+    """Get the intro text for the homepage."""
+    settings = await db.settings.find_one({"key": "intro_text"}, {"_id": 0})
+    if settings:
+        return {"text_de": settings.get("text_de", ""), "text_en": settings.get("text_en", "")}
+    # Default text
+    return {
+        "text_de": "Mit den folgenden Hotels haben wir die besten Preise ausgehandelt. Übernachtung ist möglich ab 89 € pro Person im geteilten Doppelzimmer im Hotel Ankerhof. Frühstück und Bettensteuer sind inklusive. Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.",
+        "text_en": "We have negotiated the best prices with the following hotels. Accommodation starts from €89 per person in a shared double room at Hotel Ankerhof. Breakfast and city tax are included. All accommodations are within easy walking distance of the Händel Hall. Travel Events is the intermediary. A 25% deposit is required for reservation. The balance is due 6 weeks before arrival. Free cancellation is possible up to one week before, then 50% until one day before, after which 100% cancellation fees apply."
+    }
+
+@api_router.put("/admin/settings/intro-text")
+async def update_intro_text(data: dict, admin: dict = Depends(get_current_admin)):
+    """Update the intro text for the homepage."""
+    text_de = data.get("text_de", "")
+    text_en = data.get("text_en", "")
+    
+    await db.settings.update_one(
+        {"key": "intro_text"},
+        {"$set": {"key": "intro_text", "text_de": text_de, "text_en": text_en, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    return {"message": "Intro text updated successfully"}
+
+# ============== ADMIN HOTEL SORTING ==============
+
+@api_router.put("/admin/hotels/reorder")
+async def admin_reorder_hotels(data: dict, admin: dict = Depends(get_current_admin)):
+    """Reorder hotels by updating their sort_order."""
+    hotel_orders = data.get("hotels", [])  # List of {id, sort_order}
+    
+    for item in hotel_orders:
+        await db.hotels.update_one(
+            {"id": item["id"]},
+            {"$set": {"sort_order": item["sort_order"]}}
+        )
+    
+    return {"message": "Hotels reordered successfully"}
+
 # ============== ADMIN STATS ==============
 
 @api_router.get("/admin/stats")
@@ -2246,6 +2288,10 @@ async def seed_inventory(admin: dict = Depends(get_current_admin)):
         "Dorint": {
             "inventory_type": "pool",
             "inventory": {"standard_pool": 20, "comfort_pool": 20, "single": 0, "double": 0, "twin": 0}
+        },
+        "Hey": {
+            "inventory_type": "fixed",
+            "inventory": {"single": 10, "double": 10, "twin": 0}  # 10 EZ, 10 DZ
         },
         "Rotes Ross": {
             "inventory_type": "fixed",

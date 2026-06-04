@@ -45,7 +45,8 @@ const HOTEL_COORDS = {
   'b&b': [51.4817, 11.9656],
   'ankerhof': [51.4824, 11.9621],
   'dorint': [51.4799, 11.9811],
-  'niu': [51.4795, 11.9820],  // Neben dem Dorint Hotel (Charlottenhof-Bereich)
+  'niu': [51.4795, 11.9820],  // Neben dem Dorint Hotel
+  'hey': [51.4824, 11.9713],  // Rathausstraße 3, rechts vom Marktplatz
 };
 
 // Get hotel position by name matching
@@ -55,6 +56,7 @@ const getHotelPosition = (hotelName) => {
   if (name.includes('ankerhof')) return HOTEL_COORDS.ankerhof;
   if (name.includes('dorint') || name.includes('charlottenhof')) return HOTEL_COORDS.dorint;
   if (name.includes('niu') || name.includes('ridge') || name.includes('holiday inn')) return HOTEL_COORDS.niu;
+  if (name.includes('hey')) return HOTEL_COORDS.hey;
   return MAP_CENTER;
 };
 

@@ -10,7 +10,7 @@ import { Textarea } from '../ui/textarea';
 import { Card, CardContent } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Badge } from '../ui/badge';
-import { Plus, Edit, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -32,7 +32,9 @@ const HotelsManagement = () => {
   const fetchHotels = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/admin/hotels`, { headers: getAuthHeaders() });
-      setHotels(response.data);
+      // Sort by sort_order
+      const sorted = response.data.sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+      setHotels(sorted);
     } catch (error) {
       console.error('Error fetching hotels:', error);
     } finally {
@@ -43,6 +45,29 @@ const HotelsManagement = () => {
   useEffect(() => {
     fetchHotels();
   }, [fetchHotels]);
+
+  const handleMoveHotel = async (index, direction) => {
+    const newHotels = [...hotels];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (targetIndex < 0 || targetIndex >= newHotels.length) return;
+    
+    // Swap hotels
+    [newHotels[index], newHotels[targetIndex]] = [newHotels[targetIndex], newHotels[index]];
+    
+    // Update sort_order for all hotels
+    const hotelOrders = newHotels.map((hotel, i) => ({ id: hotel.id, sort_order: i }));
+    
+    setHotels(newHotels);
+    
+    try {
+      await axios.put(`${API}/admin/hotels/reorder`, { hotels: hotelOrders }, { headers: getAuthHeaders() });
+      toast.success(language === 'de' ? 'Reihenfolge aktualisiert' : 'Order updated');
+    } catch (error) {
+      toast.error(language === 'de' ? 'Fehler beim Sortieren' : 'Error reordering');
+      fetchHotels(); // Revert on error
+    }
+  };
 
   const handleEdit = (hotel) => {
     setEditingHotel(hotel);
@@ -133,18 +158,44 @@ const HotelsManagement = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {hotels.map((hotel) => (
+      <div className="space-y-4">
+        {hotels.map((hotel, index) => (
           <Card key={hotel.id} className="border-[#E5E0D5]">
             <CardContent className="p-6">
               <div className="flex gap-4">
+                {/* Sort buttons */}
+                <div className="flex flex-col gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleMoveHotel(index, 'up')}
+                    disabled={index === 0}
+                    className="p-1 h-8 w-8"
+                    data-testid={`move-up-${hotel.id}`}
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleMoveHotel(index, 'down')}
+                    disabled={index === hotels.length - 1}
+                    className="p-1 h-8 w-8"
+                    data-testid={`move-down-${hotel.id}`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </div>
                 <img
                   src={hotel.images?.[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=200'}
                   alt={hotel.name}
                   className="w-24 h-24 object-cover rounded-lg"
                 />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{hotel.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#4A4A4A] bg-[#F5F2EA] px-2 py-1 rounded">#{index + 1}</span>
+                    <h3 className="font-semibold text-lg">{hotel.name}</h3>
+                  </div>
                   <p className="text-sm text-[#4A4A4A]">{hotel.address}</p>
                   <div className="mt-2 text-sm">
                     <span className="text-[#6B1D2A] font-semibold">Einzelzimmer: {hotel.single_price}€</span>
@@ -156,7 +207,7 @@ const HotelsManagement = () => {
                   </Badge>
                 </div>
               </div>
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4 ml-12">
                 <Button 
                   variant="outline" 
                   size="sm" 

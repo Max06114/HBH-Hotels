@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
 import { motion } from 'framer-motion';
@@ -20,28 +20,34 @@ const HomePage = () => {
   const { language, t } = useLanguage();
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [introText, setIntroText] = useState({ text_de: '', text_en: '' });
 
-  useEffect(() => {
-    fetchHotels();
-  }, []);
-
-  const fetchHotels = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      // Try to seed hotels first
-      await axios.post(`${API}/seed-hotels`).catch(() => {});
-      
-      const response = await axios.get(`${API}/hotels`);
-      setHotels(response.data);
+      // Fetch hotels and intro text in parallel
+      const [hotelsRes, introRes] = await Promise.all([
+        axios.get(`${API}/hotels`),
+        axios.get(`${API}/settings/intro-text`).catch(() => ({ data: { text_de: '', text_en: '' } }))
+      ]);
+      setHotels(hotelsRes.data);
+      setIntroText(introRes.data);
     } catch (error) {
-      console.error('Error fetching hotels:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const scrollToHotels = () => {
     document.getElementById('hotels')?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Get the current intro text based on language
+  const currentIntroText = language === 'de' ? introText.text_de : introText.text_en;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
@@ -130,14 +136,9 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-[#4A4A4A] leading-relaxed">
-              {language === 'de' ? (
-                <>
-                  <strong className="text-[#6B1D2A]">Mit den folgenden Hotels haben wir die besten Preise ausgehandelt.</strong> Übernachtung ist möglich ab 89 € pro Person im geteilten Doppelzimmer im Hotel Ankerhof. <strong>Frühstück und Bettensteuer sind inklusive.</strong> Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.
-                </>
-              ) : (
-                <>
-                  <strong className="text-[#6B1D2A]">We have negotiated the best prices with the following hotels.</strong> Accommodation is available from €89 per person in a shared double room at Hotel Ankerhof. <strong>Breakfast and city tax are included.</strong> All accommodations are within walking distance of the Händelhalle. Travel Events is the intermediary. A 25% deposit is required for reservation. The remainder is due 6 weeks before arrival. Free cancellation is possible up to one week before, then 50% up to one day before, after which 100% cancellation fees apply.
-                </>
+              {currentIntroText || (language === 'de' 
+                ? 'Mit den folgenden Hotels haben wir die besten Preise ausgehandelt. Übernachtung ist möglich ab 89 € pro Person im geteilten Doppelzimmer im Hotel Ankerhof. Frühstück und Bettensteuer sind inklusive. Alle Unterkünfte sind gut fußläufig zur Händelhalle gelegen. Travel Events ist Vermittler. Eine 25% Anzahlung ist für die Reservierung nötig. Der Rest wird 6 Wochen vor Anreise fällig. Eine kostenfreie Stornierung ist bis zu einer Woche vorher möglich, danach 50% bis einen Tag vorher, wonach 100% Stornogebühren anfallen.'
+                : 'We have negotiated the best prices with the following hotels. Accommodation is available from €89 per person in a shared double room at Hotel Ankerhof. Breakfast and city tax are included. All accommodations are within walking distance of the Händelhalle. Travel Events is the intermediary. A 25% deposit is required for reservation. The remainder is due 6 weeks before arrival. Free cancellation is possible up to one week before, then 50% up to one day before, after which 100% cancellation fees apply.'
               )}
             </p>
           </div>
