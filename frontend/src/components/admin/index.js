@@ -10,3 +10,4 @@ export { default as SchedulerManagement } from './SchedulerManagement';
 export { default as ImageManager } from './ImageManager';
 export { default as AnalyticsDashboard } from './AnalyticsDashboard';
 export { default as ContentSettings } from './ContentSettings';
+export { default as EmailTemplates } from './EmailTemplates';

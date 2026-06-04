@@ -1590,6 +1590,51 @@ async def update_intro_text(data: dict, admin: dict = Depends(get_current_admin)
     )
     return {"message": "Intro text updated successfully"}
 
+# ============== EMAIL TEMPLATES ==============
+
+@api_router.get("/admin/email-templates/{hotel_id}")
+async def get_email_templates(hotel_id: str, admin: dict = Depends(get_current_admin)):
+    """Get email templates for a specific hotel or default templates."""
+    # First try hotel-specific templates
+    templates = await db.email_templates.find_one({"hotel_id": hotel_id}, {"_id": 0})
+    
+    if not templates:
+        # Fall back to default templates
+        templates = await db.email_templates.find_one({"hotel_id": "default"}, {"_id": 0})
+    
+    if not templates:
+        # Return empty templates (frontend will use defaults)
+        return {"hotel_id": hotel_id, "templates": {}}
+    
+    return {"hotel_id": hotel_id, "templates": templates.get("templates", {})}
+
+@api_router.put("/admin/email-templates/{hotel_id}")
+async def update_email_templates(hotel_id: str, data: dict, admin: dict = Depends(get_current_admin)):
+    """Update email templates for a specific hotel or default templates."""
+    templates = data.get("templates", {})
+    
+    await db.email_templates.update_one(
+        {"hotel_id": hotel_id},
+        {"$set": {
+            "hotel_id": hotel_id,
+            "templates": templates,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Email templates updated successfully", "hotel_id": hotel_id}
+
+@api_router.get("/admin/scheduler/status")
+async def get_scheduler_status(admin: dict = Depends(get_current_admin)):
+    """Get the status of the email scheduler."""
+    return {
+        "running": scheduler.running if scheduler else False,
+        "payment_reminder_schedule": "Montag 9:00 UTC (wöchentlich)",
+        "arrival_reminder_schedule": "1 Woche vor Check-in",
+        "next_run": "Siehe Automatisierung für Details"
+    }
+
 # ============== ADMIN STATS ==============
 
 @api_router.get("/admin/stats")

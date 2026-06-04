@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { Card, CardContent } from '../ui/card';
-import { MapPin, Star } from 'lucide-react';
+import { MapPin, Star, Building } from 'lucide-react';
 
 // German price format helper
 const formatPrice = (price) => {
@@ -30,6 +30,16 @@ const BookingSummary = ({ hotel, priceInfo }) => {
         </div>
         <CardContent className="p-6">
           <h3 className="font-serif text-xl font-semibold mb-2">{hotelName}</h3>
+          
+          {/* Hotel Address */}
+          {hotel.address && (
+            <div className="flex items-start gap-2 text-[#4A4A4A] text-sm mb-2">
+              <Building className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{hotel.address}</span>
+            </div>
+          )}
+          
+          {/* Distance to Venue */}
           <div className="flex items-center gap-2 text-[#4A4A4A] text-sm mb-4">
             <MapPin className="w-4 h-4" />
             <span>{language === 'en' ? hotel.distance_to_venue_en : hotel.distance_to_venue}</span>
