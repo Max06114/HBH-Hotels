@@ -1367,7 +1367,7 @@ async def admin_reorder_hotels(data: HotelReorderRequest, admin: dict = Depends(
 
 @api_router.get("/admin/hotels", response_model=List[Hotel])
 async def admin_get_hotels(admin: dict = Depends(get_current_admin)):
-    hotels = await db.hotels.find({}, {"_id": 0}).to_list(100)
+    hotels = await db.hotels.find({}, {"_id": 0}).sort("sort_order", 1).to_list(100)
     return hotels
 
 @api_router.post("/admin/hotels")
