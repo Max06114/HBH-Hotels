@@ -1458,37 +1458,50 @@ async def admin_get_hotel_inventory(hotel_id: str, admin: dict = Depends(get_cur
 @api_router.put("/admin/inventory/{hotel_id}")
 async def admin_update_inventory(hotel_id: str, inventory_data: InventoryUpdate, admin: dict = Depends(get_current_admin)):
     """Update inventory for a hotel."""
-    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
-    if not hotel:
-        raise HTTPException(status_code=404, detail="Hotel not found")
-    
-    # Update only provided fields
-    update_fields = {}
-    if inventory_data.single is not None:
-        update_fields["inventory.single"] = inventory_data.single
-    if inventory_data.double is not None:
-        update_fields["inventory.double"] = inventory_data.double
-    if inventory_data.twin is not None:
-        update_fields["inventory.twin"] = inventory_data.twin
-    if inventory_data.standard_pool is not None:
-        update_fields["inventory.standard_pool"] = inventory_data.standard_pool
-    if inventory_data.comfort_pool is not None:
-        update_fields["inventory.comfort_pool"] = inventory_data.comfort_pool
-    
-    if update_fields:
-        await db.hotels.update_one(
-            {"id": hotel_id},
-            {"$set": update_fields}
-        )
-        logger.info(f"Updated inventory for hotel {hotel_id}: {update_fields}")
-    
-    # Return updated hotel
-    updated_hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
-    return {
-        "message": "Inventory updated successfully",
-        "hotel_id": hotel_id,
-        "inventory": updated_hotel.get("inventory", {})
-    }
+    try:
+        hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+        if not hotel:
+            raise HTTPException(status_code=404, detail="Hotel not found")
+        
+        # Initialize inventory if it doesn't exist
+        if not hotel.get("inventory"):
+            await db.hotels.update_one(
+                {"id": hotel_id},
+                {"$set": {"inventory": {"single": 0, "double": 0, "twin": 0, "standard_pool": 0, "comfort_pool": 0}}}
+            )
+        
+        # Update only provided fields
+        update_fields = {}
+        if inventory_data.single is not None:
+            update_fields["inventory.single"] = inventory_data.single
+        if inventory_data.double is not None:
+            update_fields["inventory.double"] = inventory_data.double
+        if inventory_data.twin is not None:
+            update_fields["inventory.twin"] = inventory_data.twin
+        if inventory_data.standard_pool is not None:
+            update_fields["inventory.standard_pool"] = inventory_data.standard_pool
+        if inventory_data.comfort_pool is not None:
+            update_fields["inventory.comfort_pool"] = inventory_data.comfort_pool
+        
+        if update_fields:
+            await db.hotels.update_one(
+                {"id": hotel_id},
+                {"$set": update_fields}
+            )
+            logger.info(f"Updated inventory for hotel {hotel_id}: {update_fields}")
+        
+        # Return updated hotel
+        updated_hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+        return {
+            "message": "Inventory updated successfully",
+            "hotel_id": hotel_id,
+            "inventory": updated_hotel.get("inventory") or {}
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating inventory for hotel {hotel_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating inventory: {str(e)}")
 
 @api_router.put("/admin/hotels/{hotel_id}/inventory-type")
 async def admin_set_inventory_type(hotel_id: str, inventory_type: str, admin: dict = Depends(get_current_admin)):
