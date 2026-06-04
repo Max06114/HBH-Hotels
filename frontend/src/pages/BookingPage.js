@@ -199,8 +199,8 @@ const BookingPage = () => {
                                 onSelect={setCheckIn}
                                 defaultMonth={new Date(2027, 1, 1)}
                                 disabled={(date) => {
-                                  // Only allow February 2027
-                                  return date < new Date(2027, 1, 1) || date > new Date(2027, 1, 28);
+                                  // Allow 24.02.2027 to 01.03.2027
+                                  return date < new Date(2027, 1, 24) || date > new Date(2027, 2, 1);
                                 }}
                                 locale={locale}
                                 initialFocus
@@ -233,9 +233,9 @@ const BookingPage = () => {
                                 onSelect={setCheckOut}
                                 defaultMonth={new Date(2027, 1, 1)}
                                 disabled={(date) => {
-                                  // Only allow February 2027, and after check-in
-                                  const minDate = checkIn ? new Date(checkIn.getTime() + 86400000) : new Date(2027, 1, 2);
-                                  return date < minDate || date > new Date(2027, 1, 28);
+                                  // Allow 24.02.2027 to 01.03.2027, and after check-in
+                                  const minDate = checkIn ? new Date(checkIn.getTime() + 86400000) : new Date(2027, 1, 25);
+                                  return date < minDate || date > new Date(2027, 2, 1);
                                 }}
                                 locale={locale}
                                 initialFocus
