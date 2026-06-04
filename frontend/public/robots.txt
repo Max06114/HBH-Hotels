@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /
+
+# Keine Suchmaschinen-Indexierung erlaubt
+# Happy Birthday Händel - Hotel Booking Platform
