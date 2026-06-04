@@ -72,6 +72,16 @@ const BookingSummary = ({ hotel, priceInfo }) => {
               ? '25% Anzahlung bei Buchung, 75% Restzahlung 6 Wochen vor Anreise.' 
               : '25% deposit at booking, 75% balance due 6 weeks before arrival.'}</p>
           </div>
+
+          {/* Hotel Description */}
+          {(hotel.description || hotel.description_en) && (
+            <div className="mt-4 pt-4 border-t border-[#E5E0D5]">
+              <p className="font-semibold text-sm mb-2">{language === 'de' ? 'Hotelbeschreibung:' : 'Hotel Description:'}</p>
+              <p className="text-xs text-[#4A4A4A] leading-relaxed">
+                {language === 'en' ? hotel.description_en : hotel.description}
+              </p>
+            </div>
+          )}
         </CardContent>
       </CardContent>
     </Card>
