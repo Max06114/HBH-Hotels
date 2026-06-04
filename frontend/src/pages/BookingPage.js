@@ -176,57 +176,73 @@ const BookingPage = () => {
                       onSelectChange={handleSelectChange}
                     />
 
-                    {/* Dates */}
+                    {/* Dates - Festival dates: 25-28 February 2027 */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label>{t('checkIn')} *</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn("w-full justify-start text-left font-normal", !checkIn && "text-muted-foreground")}
-                              data-testid="check-in-btn"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {checkIn ? format(checkIn, 'PPP', { locale }) : <span>{t('checkIn')}</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={checkIn}
-                              onSelect={setCheckIn}
-                              disabled={(date) => date < new Date()}
-                              locale={locale}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <div className="flex gap-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn("flex-1 justify-start text-left font-normal", !checkIn && "text-muted-foreground")}
+                                data-testid="check-in-btn"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {checkIn ? format(checkIn, 'dd.MM.yyyy', { locale }) : <span>{t('checkIn')}</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-50" align="start" side="top">
+                              <Calendar
+                                mode="single"
+                                selected={checkIn}
+                                onSelect={setCheckIn}
+                                defaultMonth={new Date(2027, 1, 1)}
+                                disabled={(date) => {
+                                  // Only allow February 2027
+                                  return date < new Date(2027, 1, 1) || date > new Date(2027, 1, 28);
+                                }}
+                                locale={locale}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <p className="text-xs text-[#4A4A4A] mt-1">
+                          {language === 'de' ? 'Festival: 25.-28. Feb 2027' : 'Festival: Feb 25-28, 2027'}
+                        </p>
                       </div>
                       <div>
                         <Label>{t('checkOut')} *</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn("w-full justify-start text-left font-normal", !checkOut && "text-muted-foreground")}
-                              data-testid="check-out-btn"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {checkOut ? format(checkOut, 'PPP', { locale }) : <span>{t('checkOut')}</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={checkOut}
-                              onSelect={setCheckOut}
-                              disabled={(date) => date <= (checkIn || new Date())}
-                              locale={locale}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <div className="flex gap-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn("flex-1 justify-start text-left font-normal", !checkOut && "text-muted-foreground")}
+                                data-testid="check-out-btn"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {checkOut ? format(checkOut, 'dd.MM.yyyy', { locale }) : <span>{t('checkOut')}</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-50" align="start" side="top">
+                              <Calendar
+                                mode="single"
+                                selected={checkOut}
+                                onSelect={setCheckOut}
+                                defaultMonth={new Date(2027, 1, 1)}
+                                disabled={(date) => {
+                                  // Only allow February 2027, and after check-in
+                                  const minDate = checkIn ? new Date(checkIn.getTime() + 86400000) : new Date(2027, 1, 2);
+                                  return date < minDate || date > new Date(2027, 1, 28);
+                                }}
+                                locale={locale}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                       </div>
                     </div>
 
@@ -244,24 +260,26 @@ const BookingPage = () => {
                       />
                     </div>
 
-                    {/* PayPal Button */}
-                    {priceInfo && (
-                      <div className="mt-2">
-                        <p className="text-center text-sm text-[#4A4A4A] mb-4">
-                          {language === 'de' 
-                            ? 'Bezahlen Sie sicher mit PayPal oder Kreditkarte:' 
-                            : 'Pay securely with PayPal or credit card:'}
-                        </p>
-                        <PayPalScriptProvider options={{ 
-                          clientId: PAYPAL_CLIENT_ID,
-                          currency: "EUR",
-                          locale: language === 'de' ? 'de_DE' : 'en_US'
-                        }}>
-                          <PayPalButtons
-                            style={{ 
-                              layout: "vertical",
-                              color: "blue",
-                              shape: "pill",
+                    {/* Spacer to prevent calendar overlap */}
+                    <div className="pt-4 border-t border-[#E5E0D5]">
+                      {/* PayPal Button */}
+                      {priceInfo && (
+                        <div className="mt-2">
+                          <p className="text-center text-sm text-[#4A4A4A] mb-4">
+                            {language === 'de' 
+                              ? 'Bezahlen Sie sicher mit PayPal oder Kreditkarte:' 
+                              : 'Pay securely with PayPal or credit card:'}
+                          </p>
+                          <PayPalScriptProvider options={{ 
+                            clientId: PAYPAL_CLIENT_ID,
+                            currency: "EUR",
+                            locale: language === 'de' ? 'de_DE' : 'en_US'
+                          }}>
+                            <PayPalButtons
+                              style={{ 
+                                layout: "vertical",
+                                color: "blue",
+                                shape: "pill",
                               label: "pay",
                               height: 50
                             }}
@@ -325,7 +343,8 @@ const BookingPage = () => {
                           />
                         </PayPalScriptProvider>
                       </div>
-                    )}
+                      )}
+                    </div>
                   </form>
                 </CardContent>
               </Card>
