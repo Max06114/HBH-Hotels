@@ -622,7 +622,8 @@ async def get_hotel_availability(hotel_id: str):
     if not hotel:
         raise HTTPException(status_code=404, detail=f"Hotel not found: {hotel_id}")
     
-    inventory = hotel.get("inventory", {})
+    # Handle None inventory - default to empty dict
+    inventory = hotel.get("inventory") or {}
     inventory_type = hotel.get("inventory_type", "fixed")
     
     # Calculate availability for each room type
@@ -630,8 +631,8 @@ async def get_hotel_availability(hotel_id: str):
     
     if inventory_type == "pool":
         # Pool-based hotel (e.g., Dorint)
-        standard_available = inventory.get("standard_pool", 0)
-        comfort_available = inventory.get("comfort_pool", 0)
+        standard_available = inventory.get("standard_pool", 0) if inventory else 0
+        comfort_available = inventory.get("comfort_pool", 0) if inventory else 0
         
         availability = {
             "single": standard_available,
@@ -646,10 +647,12 @@ async def get_hotel_availability(hotel_id: str):
         }
     else:
         # Fixed inventory (e.g., B&B, Ankerhof)
+        # If no inventory configured, show unlimited availability (999)
+        has_inventory = bool(inventory)
         availability = {
-            "single": inventory.get("single", 0),
-            "double": inventory.get("double", 0),
-            "twin": inventory.get("twin", 0),
+            "single": inventory.get("single", 999) if has_inventory else 999,
+            "double": inventory.get("double", 999) if has_inventory else 999,
+            "twin": inventory.get("twin", 999) if has_inventory else 999,
             "single_comfort": 0,
             "double_comfort": 0,
             "twin_comfort": 0,
