@@ -5,7 +5,7 @@ import axios from 'axios';
 import { Card, CardContent } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Euro, TrendingUp } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -35,10 +35,18 @@ const PaymentsManagement = () => {
     fetchPayments();
   }, [fetchPayments]);
 
+  // Calculate sum of all paid deposits
+  const totalPaidDeposits = payments
+    .filter(p => p.status === 'paid' || p.status === 'completed')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const paidCount = payments.filter(p => p.status === 'paid' || p.status === 'completed').length;
+
   const getStatusBadge = (status) => {
     const config = {
       initiated: { label: 'Initiiert', className: 'bg-gray-100 text-gray-800' },
       paid: { label: 'Bezahlt', className: 'bg-green-100 text-green-800' },
+      completed: { label: 'Bezahlt', className: 'bg-green-100 text-green-800' },
       failed: { label: 'Fehlgeschlagen', className: 'bg-red-100 text-red-800' },
     };
     const c = config[status] || config.initiated;
@@ -52,6 +60,36 @@ const PaymentsManagement = () => {
   return (
     <div data-testid="admin-payments">
       <h1 className="font-serif text-3xl text-[#1A1A1A] mb-8">{t('adminPayments')}</h1>
+      
+      {/* Sum of Paid Deposits */}
+      <Card className="border-[#E5E0D5] bg-gradient-to-r from-green-50 to-emerald-50 mb-6">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-100 rounded-full">
+                <Euro className="w-8 h-8 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-green-700 font-medium">
+                  {language === 'de' ? 'Summe bezahlter Anzahlungen' : 'Total Paid Deposits'}
+                </p>
+                <p className="text-3xl font-bold text-green-800">
+                  {formatPrice(totalPaidDeposits)} €
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2 text-green-600">
+                <TrendingUp className="w-5 h-5" />
+                <span className="font-semibold">{paidCount}</span>
+              </div>
+              <p className="text-sm text-green-600">
+                {language === 'de' ? 'Zahlungen' : 'Payments'}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       <Card className="border-[#E5E0D5]">
         <CardContent className="p-0">
