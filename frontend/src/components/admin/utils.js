@@ -49,6 +49,8 @@ export const getPaymentStatusColor = (status) => {
       return 'bg-purple-100 text-purple-800';
     case 'cancelled':
       return 'bg-red-100 text-red-800';
+    case 'abandoned':
+      return 'bg-gray-100 text-gray-600';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -67,14 +69,16 @@ export const getPaymentStatusLabel = (status, language = 'de') => {
       deposit_paid: 'Anzahlung bezahlt',
       pending: 'Ausstehend',
       refunded: 'Erstattet',
-      cancelled: 'Storniert'
+      cancelled: 'Storniert',
+      abandoned: 'Abgebrochen'
     },
     en: {
       fully_paid: 'Fully Paid',
       deposit_paid: 'Deposit Paid',
       pending: 'Pending',
       refunded: 'Refunded',
-      cancelled: 'Cancelled'
+      cancelled: 'Cancelled',
+      abandoned: 'Abandoned'
     }
   };
   return labels[language]?.[status] || status;

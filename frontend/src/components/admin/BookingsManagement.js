@@ -8,7 +8,9 @@ import { Card, CardContent } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Badge } from '../ui/badge';
-import { Download, Ban, Loader2 } from 'lucide-react';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Download, Ban, Loader2, Mail, Search } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -25,6 +27,21 @@ const BookingsManagement = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [resendingId, setResendingId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [hotelFilter, setHotelFilter] = useState('all');
+  const hotelNames = [...new Set(bookings.map((b) => b.hotel_name).filter(Boolean))].sort();
+
+  const q = search.trim().toLowerCase();
+  const filteredBookings = bookings.filter((b) => {
+    if (statusFilter !== 'all' && b.payment_status !== statusFilter) return false;
+    if (hotelFilter !== 'all' && b.hotel_name !== hotelFilter) return false;
+    if (!q) return true;
+    return `${b.first_name} ${b.last_name}`.toLowerCase().includes(q)
+      || b.email?.toLowerCase().includes(q)
+      || b.booking_number?.toLowerCase().includes(q);
+  });
 
   const fetchBookings = useCallback(async () => {
     try {
@@ -80,6 +97,18 @@ const BookingsManagement = () => {
     }
   };
 
+  const handleResendConfirmation = async (booking) => {
+    setResendingId(booking.id);
+    try {
+      await axios.post(`${API}/admin/bookings/${booking.id}/resend-confirmation`, {}, { headers: getAuthHeaders() });
+      toast.success(language === 'de' ? `Bestätigung an ${booking.email} gesendet` : `Confirmation sent to ${booking.email}`);
+    } catch (error) {
+      toast.error(language === 'de' ? 'E-Mail konnte nicht gesendet werden' : 'Email could not be sent');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const handleDownloadInvoice = async (bookingId, invoiceNumber) => {
     try {
       const response = await axios.get(`${API}/bookings/${bookingId}/invoice`, {
@@ -105,6 +134,7 @@ const BookingsManagement = () => {
       fully_paid: { label: t('fullyPaid'), className: 'bg-green-100 text-green-800' },
       refunded: { label: t('refunded'), className: 'bg-purple-100 text-purple-800' },
       cancelled: { label: t('cancelled'), className: 'bg-red-100 text-red-800' },
+      abandoned: { label: language === 'de' ? 'Abgebrochen' : 'Abandoned', className: 'bg-gray-100 text-gray-600' },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Badge className={config.className}>{config.label}</Badge>;
@@ -132,6 +162,47 @@ const BookingsManagement = () => {
         </Button>
       </div>
       
+      <div className="flex flex-col md:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#4A4A4A]" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={language === 'de' ? 'Suche nach Name, E-Mail oder Buchungsnummer…' : 'Search by name, email or booking number…'}
+            className="pl-9 border-[#E5E0D5] bg-white"
+            data-testid="bookings-search-input"
+          />
+        </div>
+        <Select value={hotelFilter} onValueChange={setHotelFilter}>
+          <SelectTrigger className="md:w-64 border-[#E5E0D5] bg-white" data-testid="bookings-hotel-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{language === 'de' ? 'Alle Hotels' : 'All hotels'}</SelectItem>
+            {hotelNames.map((name) => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="md:w-56 border-[#E5E0D5] bg-white" data-testid="bookings-status-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{language === 'de' ? 'Alle Status' : 'All statuses'}</SelectItem>
+            <SelectItem value="deposit_paid">{t('depositPaid')}</SelectItem>
+            <SelectItem value="fully_paid">{t('fullyPaid')}</SelectItem>
+            <SelectItem value="pending">{t('pending')}</SelectItem>
+            <SelectItem value="abandoned">{language === 'de' ? 'Abgebrochen' : 'Abandoned'}</SelectItem>
+            <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+            <SelectItem value="refunded">{t('refunded')}</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="self-center text-sm text-[#4A4A4A] whitespace-nowrap" data-testid="bookings-result-count">
+          {filteredBookings.length} / {bookings.length}
+        </span>
+      </div>
+      
       <Card className="border-[#E5E0D5]">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -149,7 +220,7 @@ const BookingsManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bookings.map((booking) => (
+                {filteredBookings.map((booking) => (
                   <TableRow key={booking.id} className="hover:bg-[#F5F2EA]">
                     <TableCell className="font-mono text-sm">{booking.booking_number}</TableCell>
                     <TableCell>
@@ -173,7 +244,20 @@ const BookingsManagement = () => {
                         >
                           <Download className="w-4 h-4" />
                         </Button>
-                        {booking.payment_status !== 'cancelled' && (
+                        {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleResendConfirmation(booking)}
+                            disabled={resendingId === booking.id}
+                            title={language === 'de' ? 'Bestätigung erneut senden' : 'Resend confirmation'}
+                            className="text-[#6B1D2A]"
+                            data-testid={`resend-confirmation-${booking.id}`}
+                          >
+                            {resendingId === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                          </Button>
+                        )}
+                        {!['cancelled', 'abandoned'].includes(booking.payment_status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -191,9 +275,11 @@ const BookingsManagement = () => {
               </TableBody>
             </Table>
           </div>
-          {bookings.length === 0 && (
-            <div className="text-center py-12 text-[#4A4A4A]">
-              {language === 'de' ? 'Keine Buchungen vorhanden.' : 'No bookings found.'}
+          {filteredBookings.length === 0 && (
+            <div className="text-center py-12 text-[#4A4A4A]" data-testid="bookings-empty">
+              {bookings.length === 0
+                ? (language === 'de' ? 'Keine Buchungen vorhanden.' : 'No bookings found.')
+                : (language === 'de' ? 'Keine Buchungen passen zur Suche.' : 'No bookings match your search.')}
             </div>
           )}
         </CardContent>

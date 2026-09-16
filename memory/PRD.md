@@ -162,6 +162,21 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - [ ] Multi-language admin dashboard
 
 ## Changelog
+- **2026-06 (Fork)**: Abgebrochene Zahlungen + E-Mail-Protokoll
+  - Neuer Status `abandoned` ("Abgebrochen"): Pending-Buchungen > 24h werden stündlich (und beim Start) automatisch markiert (`mark_abandoned_bookings`, APScheduler IntervalTrigger). Manuell: `POST /api/admin/bookings/mark-abandoned`
+  - CSV-Export enthält nur noch bezahlte Buchungen (deposit_paid / fully_paid)
+  - `send_email()` protokolliert jede E-Mail in `email_logs` (to, subject, email_type, booking_number, status sent/failed, error)
+  - Neuer Admin-Tab "E-Mail-Protokoll" (`/admin/email-logs`, `GET /api/admin/email-logs`) mit Suche
+  - Button "Bestätigung erneut senden" in Buchungsliste (`POST /api/admin/bookings/{id}/resend-confirmation`, nur für bezahlte Buchungen)
+  - Doppelter `/admin/scheduler/status`-Endpoint zusammengeführt (liefert `running`, `scheduler_running`, `jobs`, `recent_runs`)
+  - Hinweis: Die 4 Pending-Einträge von Mairéad Mullaney im Live-System werden nach Deployment automatisch auf "Abgebrochen" gesetzt (Job läuft beim Start)
+- **2026-06 (Fork)**: Buchungssuche (Name/E-Mail/Buchungsnummer) + Statusfilter in der Admin-Buchungsliste (clientseitig, `BookingsManagement.js`)
+- **2026-06 (Fork)**: E-Mail-Zuverlässigkeit & Selbstservice
+  - BCC an ADMIN_EMAIL (info@travel-events.de) bei allen Bestätigungen (Buchung, erneut gesendet, Restzahlung) – `send_email(bcc_admin=True)`, im Protokoll als BCC sichtbar
+  - Admin-Warnmail (`admin_alert`) bei fehlgeschlagener Zustellung an Gäste (`notify_admin_email_failure`, keine Rekursion)
+  - Hotel-Filter in der Admin-Buchungsliste
+  - Öffentliche Rechnungsseite `/invoice/:bookingId` (`InvoicePage.js`), Link in Bestätigungs- und Erinnerungs-E-Mail (`get_invoice_link()` nutzt FRONTEND_URL). Ersetzt den fehlerhaften `{FRONTEND_URL}/api/...`-Link in der Zahlungserinnerung
+  - Bekannte Lücke (Alt): Im Admin gespeicherte E-Mail-Vorlagen (`email_templates`) werden beim Versand noch nicht verwendet
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

@@ -81,7 +81,7 @@ def format_price_de(amount: float) -> str:
     return f"{amount:.2f}".replace('.', ',')
 
 
-def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = "de") -> tuple:
+def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = "de", invoice_link: str = None) -> tuple:
     """Generate booking confirmation email with invoice."""
     deposit_formatted = format_price_de(booking['deposit_amount'])
     remaining_formatted = format_price_de(booking['remaining_amount'])
@@ -115,6 +115,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
                 <p><strong>Wichtig:</strong> Der Restbetrag von <strong>{remaining_formatted} €</strong> ist 6 Wochen vor Anreise fällig. Sie erhalten rechtzeitig eine Zahlungserinnerung.</p>
                 
                 <p>Ihre Rechnung finden Sie im Anhang dieser E-Mail.</p>
+                {f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Rechnung herunterladen</a><br><span style="font-size: 12px; color: #999;">Über diesen Link können Sie Ihre Rechnung jederzeit erneut herunterladen.</span></p>' if invoice_link else ''}
         """
     else:
         title = "Booking Confirmation"
@@ -144,6 +145,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
                 <p><strong>Important:</strong> The remaining balance of <strong>€{booking['remaining_amount']:.2f}</strong> is due 6 weeks before arrival. You will receive a payment reminder in time.</p>
                 
                 <p>Please find your invoice attached to this email.</p>
+                {f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Download Invoice</a><br><span style="font-size: 12px; color: #999;">You can use this link to download your invoice again at any time.</span></p>' if invoice_link else ''}
         """
     
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
