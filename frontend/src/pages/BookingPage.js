@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
@@ -32,6 +32,21 @@ const BookingPage = () => {
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const paypalOrderRef = useRef(null);
+
+  const reportPayPalEvent = (event, detail, orderId) => {
+    const order_id = orderId || paypalOrderRef.current;
+    if (!order_id) return;
+    axios.post(`${API}/payments/paypal/event`, { order_id, event, detail }).catch(() => {});
+  };
+
+  const paymentDeclinedMessage = (code) => {
+    const reason = code ? ` (${code})` : '';
+    return language === 'de'
+      ? `Die Zahlung wurde von PayPal nicht abgeschlossen${reason}. Bitte prüfen Sie Ihre Zahlungsdaten, versuchen Sie eine andere Zahlungsart oder kontaktieren Sie uns unter info@travel-events.de – wir helfen gern weiter.`
+      : `PayPal could not complete the payment${reason}. Please check your payment details, try another payment method or contact us at info@travel-events.de – we are happy to help.`;
+  };
+
   const [availability, setAvailability] = useState(null);
   
   // Default dates: 25.02.2027 - 28.02.2027
@@ -308,6 +323,7 @@ const BookingPage = () => {
                                 };
                                 
                                 const response = await axios.post(`${API}/payments/paypal/create-order`, bookingData);
+                                paypalOrderRef.current = response.data.order_id;
                                 return response.data.order_id;
                               } catch (error) {
                                 setSubmitting(false);
@@ -324,19 +340,24 @@ const BookingPage = () => {
                                 
                                 if (response.data.status === 'COMPLETED') {
                                   toast.success(language === 'de' ? 'Zahlung erfolgreich!' : 'Payment successful!');
-                                  navigate(`/confirmation?payment_method=paypal&booking_id=${response.data.booking_id}`);
+                                  navigate(`/booking/confirmation?method=paypal&booking_id=${response.data.booking_id}`);
+                                } else {
+                                  toast.error(paymentDeclinedMessage(response.data.error_code), { duration: 12000 });
                                 }
                               } catch (error) {
-                                toast.error(language === 'de' ? 'Zahlung fehlgeschlagen' : 'Payment failed');
+                                toast.error(paymentDeclinedMessage(), { duration: 12000 });
                               } finally {
                                 setSubmitting(false);
                               }
                             }}
                             onError={(err) => {
                               console.error('PayPal Error:', err);
+                              reportPayPalEvent('paypal_error', err?.message || String(err));
+                              toast.error(paymentDeclinedMessage(), { duration: 12000 });
                               setSubmitting(false);
                             }}
-                            onCancel={() => {
+                            onCancel={(data) => {
+                              reportPayPalEvent('cancelled', null, data?.orderID);
                               toast.info(language === 'de' ? 'Zahlung abgebrochen' : 'Payment cancelled');
                               setSubmitting(false);
                             }}

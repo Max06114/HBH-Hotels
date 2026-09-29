@@ -11,6 +11,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Download, Ban, Loader2, Mail, Search } from 'lucide-react';
+import { getPaymentEventLabel } from './utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -233,7 +234,18 @@ const BookingsManagement = () => {
                     <TableCell>{booking.check_in}</TableCell>
                     <TableCell>{booking.check_out}</TableCell>
                     <TableCell className="font-semibold">{formatPrice(booking.total_price)} €</TableCell>
-                    <TableCell>{getStatusBadge(booking.payment_status)}</TableCell>
+                    <TableCell>
+                      {getStatusBadge(booking.payment_status)}
+                      {['pending', 'abandoned'].includes(booking.payment_status) && booking.last_payment_event && (
+                        <p
+                          className="text-xs text-[#4A4A4A] mt-1 max-w-[220px]"
+                          title={booking.last_payment_event.paypal_error?.message || booking.last_payment_event.detail || ''}
+                          data-testid={`payment-reason-${booking.id}`}
+                        >
+                          {getPaymentEventLabel(booking.last_payment_event, language)}
+                        </p>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button

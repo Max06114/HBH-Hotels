@@ -56,7 +56,7 @@ const BookingSummary = ({ hotel, priceInfo }) => {
                 <span className="font-semibold text-[#6B1D2A]">{formatPrice(priceInfo.deposit)} €</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[#4A4A4A]">{t('remainingBalance')}</span>
+                <span className="text-[#4A4A4A]">{t('remaining')}</span>
                 <span>{formatPrice(priceInfo.remaining)} €</span>
               </div>
               <div className="border-t border-[#E5E0D5] pt-3 flex justify-between">

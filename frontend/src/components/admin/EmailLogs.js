@@ -18,6 +18,7 @@ const TYPE_LABELS = {
     arrival_reminder: 'Anreise-Erinnerung',
     cancellation: 'Stornierung',
     admin_alert: 'Admin-Warnung (Zustellfehler)',
+    payment_failure_alert: 'Admin-Warnung (Zahlungsprobleme)',
     other: 'Sonstige'
   },
   en: {
@@ -28,6 +29,7 @@ const TYPE_LABELS = {
     arrival_reminder: 'Arrival Reminder',
     cancellation: 'Cancellation',
     admin_alert: 'Admin Alert (delivery failure)',
+    payment_failure_alert: 'Admin Alert (payment failures)',
     other: 'Other'
   }
 };

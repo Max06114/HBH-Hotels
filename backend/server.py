@@ -27,6 +27,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
 # Import models
 from models import (
@@ -650,6 +651,85 @@ def get_invoice_link(booking_id: str) -> str:
     base_url = os.environ.get("FRONTEND_URL", "https://event-payments-3.preview.emergentagent.com")
     return f"{base_url}/invoice/{booking_id}"
 
+# ============== PAYMENT EVENT LOG ==============
+
+PAYMENT_FAILURE_EVENTS = {"order_failed", "capture_failed", "paypal_error", "cancelled"}
+
+async def log_payment_event(booking: dict, event: str, detail: str = None, paypal_error: dict = None, order_id: str = None):
+    """Store a payment step (success or failure) and remember the last one on the booking."""
+    entry = {
+        "id": str(uuid.uuid4()),
+        "booking_id": booking.get("id") if booking else None,
+        "booking_number": booking.get("booking_number") if booking else None,
+        "email": booking.get("email") if booking else None,
+        "hotel_name": booking.get("hotel_name") if booking else None,
+        "event": event,
+        "detail": detail,
+        "paypal_error": paypal_error,
+        "order_id": order_id,
+        "at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.payment_events.insert_one(entry)
+    if booking and booking.get("id"):
+        await db.bookings.update_one(
+            {"id": booking["id"]},
+            {"$set": {"last_payment_event": {"event": event, "detail": detail, "paypal_error": paypal_error, "at": entry["at"]}}}
+        )
+    if event in PAYMENT_FAILURE_EVENTS and booking and booking.get("email"):
+        await maybe_alert_repeated_payment_failures(booking)
+
+def summarize_paypal_error(payload: dict) -> tuple:
+    """Return (code, message) from a PayPal error response."""
+    if not isinstance(payload, dict):
+        return ("UNKNOWN", str(payload))
+    details = payload.get("details") or []
+    issue = details[0].get("issue") if details and isinstance(details[0], dict) else None
+    description = details[0].get("description") if details and isinstance(details[0], dict) else None
+    code = issue or payload.get("name") or payload.get("error") or "UNKNOWN"
+    message = description or payload.get("message") or payload.get("error_description") or ""
+    debug_id = payload.get("debug_id")
+    if debug_id:
+        message = f"{message} (debug_id: {debug_id})".strip()
+    return (code, message)
+
+async def maybe_alert_repeated_payment_failures(booking: dict):
+    """Email the admin once when a guest has 2+ failed payment attempts within 24h."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    email = booking["email"]
+    failures = await db.payment_events.count_documents({
+        "email": email, "event": {"$in": list(PAYMENT_FAILURE_EVENTS)}, "at": {"$gte": since}
+    })
+    if failures < 2:
+        return
+    already = await db.email_logs.find_one({"email_type": "payment_failure_alert", "to_email": ADMIN_EMAIL,
+                                            "subject": {"$regex": email}, "sent_at": {"$gte": since}})
+    if already:
+        return
+    events = await db.payment_events.find({"email": email, "at": {"$gte": since}}, {"_id": 0}).sort("at", -1).to_list(20)
+    rows = "".join(
+        f"<tr><td style='padding:4px 10px 4px 0;'>{e['at'][:16].replace('T', ' ')}</td>"
+        f"<td style='padding:4px 10px 4px 0;'>{e.get('booking_number') or '-'}</td>"
+        f"<td style='padding:4px 10px 4px 0;'>{e['event']}</td>"
+        f"<td style='padding:4px 0;'>{(e.get('paypal_error') or {}).get('code', '') or ''} {e.get('detail') or ''}</td></tr>"
+        for e in events
+    )
+    body = f"""
+    <html><body style="font-family: Arial, sans-serif; color: #1A1A1A;">
+        <h2 style="color: #B45309;">Wiederholt fehlgeschlagene Zahlungsversuche</h2>
+        <p><strong>{booking.get('first_name', '')} {booking.get('last_name', '')}</strong> ({email}) hat in den letzten 24 Stunden
+        <strong>{failures}</strong> Zahlungsversuche nicht abschließen können. Hotel: {booking.get('hotel_name', '-')},
+        {booking.get('check_in', '')} – {booking.get('check_out', '')}.</p>
+        <p>Es kann sinnvoll sein, den Gast direkt zu kontaktieren und z. B. Zahlung per Überweisung anzubieten.</p>
+        <table style="border-collapse: collapse; font-size: 13px;">
+            <tr><th align="left">Zeit (UTC)</th><th align="left">Buchung</th><th align="left">Ereignis</th><th align="left">Details</th></tr>
+            {rows}
+        </table>
+        <p>Alle Details im Admin unter <strong>Buchungen</strong> (Grund unter dem Status).</p>
+    </body></html>
+    """
+    await send_email(ADMIN_EMAIL, f"[HBH] Zahlungsprobleme bei {email} ({failures} Versuche)", body,
+                     email_type="payment_failure_alert", booking=booking)
+
 # ============== PUBLIC ROUTES ==============
 
 @api_router.get("/")
@@ -1032,12 +1112,13 @@ async def create_paypal_order(order_data: PayPalOrderRequest):
     }
     
     await db.bookings.insert_one(booking)
+    await log_payment_event(booking, "booking_created", f"{order_data.room_type}, {nights} Nächte, Anzahlung {deposit_amount} €")
     
     # Get PayPal access token
     client_id = os.environ.get('PAYPAL_CLIENT_ID')
     client_secret = os.environ.get('PAYPAL_SECRET')
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         # Get access token
         auth_response = await client.post(
             "https://api-m.paypal.com/v1/oauth2/token",
@@ -1045,7 +1126,13 @@ async def create_paypal_order(order_data: PayPalOrderRequest):
             auth=(client_id, client_secret),
             data={"grant_type": "client_credentials"}
         )
-        access_token = auth_response.json()["access_token"]
+        auth_json = auth_response.json()
+        if "access_token" not in auth_json:
+            code, message = summarize_paypal_error(auth_json)
+            await log_payment_event(booking, "order_failed", "PayPal-Authentifizierung fehlgeschlagen", {"code": code, "message": message})
+            logger.error(f"PayPal auth failed: {auth_json}")
+            raise HTTPException(status_code=502, detail="PayPal ist momentan nicht erreichbar. Bitte versuchen Sie es später erneut.")
+        access_token = auth_json["access_token"]
         
         # Create PayPal order
         order_response = await client.post(
@@ -1068,24 +1155,61 @@ async def create_paypal_order(order_data: PayPalOrderRequest):
         )
         
         order = order_response.json()
+        if "id" not in order:
+            code, message = summarize_paypal_error(order)
+            await log_payment_event(booking, "order_failed", "PayPal-Order konnte nicht erstellt werden", {"code": code, "message": message})
+            logger.error(f"PayPal order creation failed: {order}")
+            raise HTTPException(status_code=502, detail=f"PayPal-Bestellung konnte nicht erstellt werden ({code}).")
         
         # Update booking with PayPal order ID
         await db.bookings.update_one(
             {"id": booking["id"]},
             {"$set": {"paypal_order_id": order["id"]}}
         )
+        await log_payment_event(booking, "order_created", None, None, order["id"])
         
         return {"order_id": order["id"], "booking_id": booking["id"]}
+
+class PayPalEventRequest(BaseModel):
+    order_id: Optional[str] = None
+    booking_id: Optional[str] = None
+    event: str
+    detail: Optional[str] = None
+
+@api_router.post("/payments/paypal/event")
+async def paypal_client_event(data: PayPalEventRequest):
+    """Frontend reports PayPal popup outcomes (guest cancelled / PayPal error)."""
+    if data.event not in ("cancelled", "paypal_error"):
+        raise HTTPException(status_code=400, detail="Invalid event")
+    query = {"id": data.booking_id} if data.booking_id else {"paypal_order_id": data.order_id}
+    if not data.booking_id and not data.order_id:
+        raise HTTPException(status_code=400, detail="order_id or booking_id required")
+    booking = await db.bookings.find_one(query, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    detail = (data.detail or "")[:500] or ("Vom Gast im PayPal-Fenster abgebrochen" if data.event == "cancelled" else "Fehler im PayPal-Fenster")
+    await log_payment_event(booking, data.event, detail, None, data.order_id)
+    return {"logged": True}
 
 @api_router.post("/payments/paypal/capture-order")
 async def capture_paypal_order(capture_data: PayPalCaptureRequest):
     """Capture a PayPal order after approval."""
     import httpx
     
+    # Idempotent: already captured (e.g. confirmation page reload)
+    existing = await db.bookings.find_one(
+        {"$or": [{"paypal_order_id": capture_data.order_id}, {"paypal_remaining_order_id": capture_data.order_id}]}, {"_id": 0}
+    )
+    if existing:
+        if existing.get("paypal_remaining_order_id") == capture_data.order_id and existing.get("payment_status") == "fully_paid":
+            return {"status": "COMPLETED", "booking_id": existing["id"], "payment_type": "remaining"}
+        if existing.get("paypal_order_id") == capture_data.order_id and existing.get("payment_status") in ("deposit_paid", "fully_paid"):
+            return {"status": "COMPLETED", "booking_id": existing["id"]}
+    
     client_id = os.environ.get('PAYPAL_CLIENT_ID')
     client_secret = os.environ.get('PAYPAL_SECRET')
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         # Get access token
         auth_response = await client.post(
             "https://api-m.paypal.com/v1/oauth2/token",
@@ -1093,7 +1217,12 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
             auth=(client_id, client_secret),
             data={"grant_type": "client_credentials"}
         )
-        access_token = auth_response.json()["access_token"]
+        auth_json = auth_response.json()
+        if "access_token" not in auth_json:
+            code, message = summarize_paypal_error(auth_json)
+            await log_payment_event(existing, "capture_failed", "PayPal-Authentifizierung fehlgeschlagen", {"code": code, "message": message}, capture_data.order_id)
+            return {"status": "FAILED", "error_code": code, "message": message}
+        access_token = auth_json["access_token"]
         
         # Capture the order
         capture_response = await client.post(
@@ -1105,6 +1234,12 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
         )
         
         capture = capture_response.json()
+        
+        if capture.get("status") != "COMPLETED":
+            code, message = summarize_paypal_error(capture)
+            await log_payment_event(existing, "capture_failed", "PayPal hat die Zahlung nicht abgeschlossen", {"code": code, "message": message}, capture_data.order_id)
+            logger.error(f"PayPal capture failed for order {capture_data.order_id}: {capture}")
+            return {"status": "FAILED", "error_code": code, "message": message}
         
         if capture.get("status") == "COMPLETED":
             # Check if this is a remaining balance payment
@@ -1142,6 +1277,7 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                     subject, body = generate_remaining_payment_confirmation_email(booking, hotel, "paypal", lang)
                     await send_email(booking['email'], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True)
                 
+                await log_payment_event(booking, "capture_completed", f"Restzahlung {booking['remaining_amount']} € erhalten", None, capture_data.order_id)
                 return {"status": "COMPLETED", "booking_id": booking["id"], "payment_type": "remaining"}
             
             # Check for deposit payment
@@ -1183,6 +1319,7 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                     subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang, get_invoice_link(booking["id"]))
                     await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf", email_type="booking_confirmation", booking=booking, bcc_admin=True)
                 
+                await log_payment_event(booking, "capture_completed", f"Anzahlung {booking['deposit_amount']} € erhalten", None, capture_data.order_id)
                 return {"status": "COMPLETED", "booking_id": booking["id"]}
         
         return {"status": capture.get("status", "FAILED"), "error": capture.get("message")}

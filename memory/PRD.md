@@ -177,6 +177,14 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Hotel-Filter in der Admin-Buchungsliste
   - Öffentliche Rechnungsseite `/invoice/:bookingId` (`InvoicePage.js`), Link in Bestätigungs- und Erinnerungs-E-Mail (`get_invoice_link()` nutzt FRONTEND_URL). Ersetzt den fehlerhaften `{FRONTEND_URL}/api/...`-Link in der Zahlungserinnerung
   - Bekannte Lücke (Alt): Im Admin gespeicherte E-Mail-Vorlagen (`email_templates`) werden beim Versand noch nicht verwendet
+- **2026-06 (Fork)**: Zahlungs-Reporting & PayPal-Fixes (Anlass: Gast Nancy Farrell, 5 abgebrochene Versuche ohne erkennbaren Grund)
+  - `payment_events`-Collection + `last_payment_event` auf der Buchung (`log_payment_event`): booking_created, order_created, order_failed, cancelled, paypal_error, capture_failed, capture_completed (mit PayPal-Code/-Meldung/debug_id)
+  - Neuer öffentlicher Endpoint `POST /api/payments/paypal/event` (nur cancelled / paypal_error) – Frontend meldet Abbruch/Fehler im PayPal-Fenster
+  - create-order / capture-order: PayPal-Fehler werden erkannt (kein KeyError/500 mehr), verständliche Fehlermeldung an den Gast; capture-order ist idempotent (bereits bezahlte Order → COMPLETED)
+  - Bugfix: Weiterleitung nach Zahlung auf `/booking/confirmation?method=paypal&booking_id=` (vorher `/confirmation` = leere Seite)
+  - Admin-Buchungsliste zeigt unter „Ausstehend“/„Abgebrochen“ den letzten Grund (`getPaymentEventLabel`, PayPal-Issue-Codes übersetzt)
+  - Admin-Warnmail `payment_failure_alert` bei ≥2 fehlgeschlagenen Versuchen eines Gastes in 24h (einmalig pro 24h)
+  - Kleiner Fix: Übersetzungsschlüssel `remainingBalance` → `remaining` in BookingSummary
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

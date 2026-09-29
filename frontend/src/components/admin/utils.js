@@ -108,3 +108,47 @@ export const getRoomTypeLabel = (roomType, language = 'de') => {
   };
   return labels[language]?.[roomType] || roomType;
 };
+
+const PAYPAL_ISSUE_LABELS = {
+  INSTRUMENT_DECLINED: { de: 'Zahlungsmittel von PayPal abgelehnt', en: 'Payment method declined by PayPal' },
+  PAYER_ACTION_REQUIRED: { de: 'Gast musste bei PayPal zusätzlich bestätigen', en: 'Payer action required at PayPal' },
+  ORDER_NOT_APPROVED: { de: 'Zahlung bei PayPal nicht freigegeben', en: 'Order not approved at PayPal' },
+  PAYEE_ACCOUNT_RESTRICTED: { de: 'Empfängerkonto (unser PayPal) eingeschränkt', en: 'Payee account restricted' },
+  TRANSACTION_REFUSED: { de: 'Transaktion von PayPal verweigert', en: 'Transaction refused by PayPal' },
+  COMPLIANCE_VIOLATION: { de: 'PayPal-Compliance-Prüfung (Land/Konto)', en: 'PayPal compliance check (country/account)' },
+  ORDER_ALREADY_CAPTURED: { de: 'Bereits bezahlt', en: 'Already captured' },
+  UNPROCESSABLE_ENTITY: { de: 'PayPal konnte die Zahlung nicht verarbeiten', en: 'PayPal could not process the payment' },
+};
+
+const PAYMENT_EVENT_LABELS = {
+  de: {
+    booking_created: 'Buchung angelegt, PayPal noch nicht geöffnet',
+    order_created: 'PayPal-Fenster geöffnet, keine Zahlung',
+    order_failed: 'PayPal-Order fehlgeschlagen',
+    cancelled: 'Vom Gast im PayPal-Fenster abgebrochen',
+    paypal_error: 'Fehler im PayPal-Fenster',
+    capture_failed: 'Zahlung von PayPal abgelehnt',
+    capture_completed: 'Zahlung erfolgreich'
+  },
+  en: {
+    booking_created: 'Booking created, PayPal not opened',
+    order_created: 'PayPal window opened, no payment',
+    order_failed: 'PayPal order failed',
+    cancelled: 'Cancelled by guest in PayPal window',
+    paypal_error: 'Error in PayPal window',
+    capture_failed: 'Payment declined by PayPal',
+    capture_completed: 'Payment successful'
+  }
+};
+
+/**
+ * Human-readable summary of the last payment event of a booking
+ */
+export const getPaymentEventLabel = (lastEvent, language = 'de') => {
+  if (!lastEvent) return null;
+  const base = PAYMENT_EVENT_LABELS[language]?.[lastEvent.event] || lastEvent.event;
+  const code = lastEvent.paypal_error?.code;
+  if (!code) return base;
+  const issue = PAYPAL_ISSUE_LABELS[code]?.[language] || code;
+  return `${base}: ${issue}`;
+};
