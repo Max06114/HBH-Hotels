@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Download, Ban, Loader2, Mail, Search } from 'lucide-react';
+import { Download, Ban, Loader2, Mail, Search, Pencil } from 'lucide-react';
+import BookingEditDialog from './BookingEditDialog';
 import { getPaymentEventLabel } from './utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -29,6 +30,7 @@ const BookingsManagement = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [resendingId, setResendingId] = useState(null);
+  const [editingBooking, setEditingBooking] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [hotelFilter, setHotelFilter] = useState('all');
@@ -256,6 +258,15 @@ const BookingsManagement = () => {
                         >
                           <Download className="w-4 h-4" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingBooking(booking)}
+                          title={language === 'de' ? 'Gastdaten bearbeiten' : 'Edit guest details'}
+                          data-testid={`edit-booking-${booking.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
                         {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
                           <Button
                             variant="ghost"
@@ -316,6 +327,16 @@ const BookingsManagement = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BookingEditDialog
+        booking={editingBooking}
+        language={language}
+        getAuthHeaders={getAuthHeaders}
+        onClose={() => setEditingBooking(null)}
+        onSaved={(updated) => {
+          setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          setEditingBooking(null);
+        }}
+      />
     </div>
   );
 };

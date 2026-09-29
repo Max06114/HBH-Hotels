@@ -1,0 +1,43 @@
+{
+  "summary": "Verified Resend email provider migration on LIVE production (Railway backend + Vercel frontend). Backend endpoints and Admin Email Logs UI all work as specified. No changes made to app code; only added a new pytest suite for the Resend/email-logs endpoints. No real email was sent by this run (guarded behind SEND_REAL_TEST_EMAIL=1); the log entry created earlier by the main agent (2026-09-29T14:57:32Z, provider=resend, status=sent, email_type=test) is present and visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/admin/login returns JWT (200) with info@travel-events.de / admin123",
+    "POST /api/admin/login rejects wrong password (401/403)",
+    "GET /api/admin/email-logs?limit=5 returns provider='resend', from_email='info@travel-events.de', from_name='Travel Events', logs[] present",
+    "GET /api/admin/email-logs without Authorization returns 401/403",
+    "POST /api/admin/email-logs/test without Authorization returns 401/403",
+    "GET /api/admin/email-logs?limit=1 shows newest entry email_type='test', status='sent', provider='resend', sent_at=2026-09-29T14:57:32Z (previously sent by main agent)",
+    "Frontend admin login (Anmelden) succeeds and redirects to /admin",
+    "Frontend /admin/email-logs: data-testid='admin-email-logs' renders",
+    "email-provider-info shows 'Versand über Resend (HTTP-API) · Travel Events <info@travel-events.de>' (contains 'Resend')",
+    "send-test-email-btn visible + enabled (NOT clicked to avoid duplicate real email)",
+    "email-logs-sent-count = 1, email-logs-failed-count = 31; table shows 32 rows; newest row 'Gesendet' (test email)",
+    "Frontend /admin/bookings loads (73 rows) - no destructive actions performed"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_email_logs_resend.py",
+    "/app/test_reports/pytest/pytest_email_logs.xml",
+    "/app/test_reports/email_logs_page.png",
+    "/app/test_reports/bookings_page.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "31 of 32 historical email log entries are 'failed' (mostly 'Timed out connecting to smtp.strato.de' from before the Resend switch, plus one Resend 403 'domain not verified' from 14:17 UTC). All post-verification sends succeed (only 1 attempt since domain was verified, and it succeeded). Consider offering a bulk 'resend failed booking confirmations' action or filtering the log by status; individual resend already exists per spec.",
+    "On /admin/bookings, no elements match data-testid^='payment-reason-' in the currently visible rows — this is expected only when pending/abandoned bookings have a payment_reason field populated; not a defect, but worth confirming the feature has been exercised with real data."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_email_logs_resend.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6 executed, 1 intentionally skipped)", "frontend": "100%"},
+  "test_credentials": {"admin_email": "info@travel-events.de", "admin_password": "admin123"},
+  "seed_data_creation": "None. Test-email POST endpoint is guarded via SEND_REAL_TEST_EMAIL=1 env var (default: skipped) to avoid a duplicate real email.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Live prod URLs: backend https://hbh-hotels-production.up.railway.app/api, frontend https://hbh-hotels.vercel.app. Admin login: info@travel-events.de / admin123. Local supervisor services are NOT running; do not attempt to start them. The pytest file /app/backend/tests/test_email_logs_resend.py can be reused; to actually re-send a real test email set env SEND_REAL_TEST_EMAIL=1 (STRICTLY at most once per verification). Never trigger booking-confirmation resends or cancellations on real bookings."
+}

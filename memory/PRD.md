@@ -191,6 +191,9 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Bestätigungs-E-Mails im PayPal-Capture-Flow laufen als Background-Task (Gast wartet nicht auf Versand)
   - Admin E-Mail-Protokoll: Provider-Anzeige, Button „Test-E-Mail senden“ (`POST /api/admin/email-logs/test`), Button „Erneut senden“ bei fehlgeschlagenen Bestätigungen (nutzt resend-confirmation)
   - Betroffene Gäste ohne Bestätigung (aus Live-Protokoll): cooneylk@gmail.com, w.ryan@dsm.ie u. a. → nach Resend-Setup über Protokoll nachsenden
+- **2026-06 (Fork)**: Resend LIVE verifiziert (testing_agent iteration_5: 100 %). Gastdaten editierbar: `PATCH /api/admin/bookings/{id}` (BookingGuestUpdate: salutation, first_name, last_name, email(EmailStr), street, postal_code, city, country, notes; schreibt `edit_history`), Stift-Button + `BookingEditDialog.js` in der Buchungsliste.
+  - Live-URLs: Backend https://hbh-hotels-production.up.railway.app (Region EU West), Frontend https://hbh-hotels.vercel.app
+  - OFFEN nach nächstem Deploy (vom Nutzer freigegeben): (1) inisdom@icloud.cm → inisdom@icloud.com korrigieren (HBH-20260909-417066); (2) Déirdre Linehan-O'Brien Doppelbuchung: HBH-20260927-578BCA auf Nancy Farrell (nancyannfarrell@gmail.com) umschreiben; (3) Bestätigung an ALLE 32 bezahlten Buchungen nachsenden (resend-confirmation)
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

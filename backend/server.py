@@ -29,7 +29,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from contextlib import asynccontextmanager
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 # Import models
 from models import (
@@ -1808,6 +1808,40 @@ async def admin_update_booking_status(booking_id: str, status: str, admin: dict 
 async def admin_mark_abandoned(admin: dict = Depends(get_current_admin)):
     """Manually run the abandoned-booking cleanup (pending > 24h)."""
     return await mark_abandoned_bookings()
+
+class BookingGuestUpdate(BaseModel):
+    salutation: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    street: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    notes: Optional[str] = None
+
+@api_router.patch("/admin/bookings/{booking_id}")
+async def admin_update_booking_guest(booking_id: str, data: BookingGuestUpdate, admin: dict = Depends(get_current_admin)):
+    """Edit guest details (name, email, address, notes) of a booking."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    updates = {k: (v.strip() if isinstance(v, str) else v) for k, v in data.model_dump(exclude_none=True).items()}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    for key in ("first_name", "last_name", "email"):
+        if key in updates and not updates[key]:
+            raise HTTPException(status_code=400, detail=f"{key} must not be empty")
+    changes = {k: {"from": booking.get(k), "to": v} for k, v in updates.items() if booking.get(k) != v}
+    if not changes:
+        return {"message": "No changes", "booking": booking}
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.bookings.update_one(
+        {"id": booking_id},
+        {"$set": updates, "$push": {"edit_history": {"at": updates["updated_at"], "by": admin.get("email"), "changes": changes}}}
+    )
+    updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    return {"message": "Booking updated", "booking": updated, "changes": changes}
 
 @api_router.post("/admin/bookings/{booking_id}/resend-confirmation")
 async def admin_resend_confirmation(booking_id: str, admin: dict = Depends(get_current_admin)):
