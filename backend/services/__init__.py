@@ -156,8 +156,8 @@ def generate_remaining_payment_confirmation_email(booking: dict, hotel: dict, pa
     """Generate confirmation email for remaining balance payment."""
     remaining_formatted = format_price_de(booking['remaining_amount'])
     total_formatted = format_price_de(booking['total_price'])
-    method_text = "Kreditkarte" if payment_method == "stripe" else "PayPal"
-    method_text_en = "credit card" if payment_method == "stripe" else "PayPal"
+    method_text = {"stripe": "Kreditkarte", "bank_transfer": "Überweisung"}.get(payment_method, "PayPal")
+    method_text_en = {"stripe": "credit card", "bank_transfer": "bank transfer"}.get(payment_method, "PayPal")
     
     if lang == "de":
         title = "Restzahlung erfolgreich!"
@@ -220,7 +220,7 @@ def generate_remaining_payment_confirmation_email(booking: dict, hotel: dict, pa
     return subject, full_body
 
 
-def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str, paypal_url: str, invoice_link: str, lang: str = "de") -> tuple:
+def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str, paypal_url: str, invoice_link: str, lang: str = "de", bank_html: str = "") -> tuple:
     """Generate payment reminder email with payment links."""
     remaining_formatted = format_price_de(booking['remaining_amount'])
     
@@ -251,6 +251,8 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
                     <br><br>
                     <a href="{paypal_url}" class="btn btn-paypal">Mit PayPal bezahlen</a>
                 </div>
+                
+                {bank_html}
                 
                 <p style="text-align: center;">
                     <a href="{invoice_link}" class="btn btn-secondary">Rechnung herunterladen</a>
@@ -284,6 +286,8 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
                     <a href="{paypal_url}" class="btn btn-paypal">Pay with PayPal</a>
                 </div>
                 
+                {bank_html}
+                
                 <p style="text-align: center;">
                     <a href="{invoice_link}" class="btn btn-secondary">Download Invoice</a>
                 </p>
@@ -291,6 +295,132 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
     
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
     return subject, full_body
+
+
+def bank_details_html(bank: dict, amount: float, reference: str, lang: str = "de") -> str:
+    """Reusable block with bank transfer details."""
+    amount_txt = f"{format_price_de(amount)} €" if lang == "de" else f"€{amount:.2f}"
+    holder_row = f"<tr><td>{'Kontoinhaber' if lang == 'de' else 'Account holder'}:</td><td>{bank['holder']}</td></tr>" if bank.get("holder") else ""
+    labels = {
+        "de": ("Bankverbindung für die Überweisung", "Bank", "Betrag", "Verwendungszweck", "Bitte geben Sie unbedingt die Buchungsnummer als Verwendungszweck an, damit wir Ihre Zahlung zuordnen können."),
+        "en": ("Bank details for your transfer", "Bank", "Amount", "Payment reference", "Please always state the booking number as payment reference so we can match your payment."),
+    }[lang if lang in ("de", "en") else "de"]
+    return f"""
+                <h3 style="margin-top: 30px;">{labels[0]}</h3>
+                <table class="info-table">
+                    {holder_row}
+                    <tr><td>{labels[1]}:</td><td>{bank['bank']}</td></tr>
+                    <tr><td>IBAN:</td><td><strong>{bank['iban']}</strong></td></tr>
+                    <tr><td>BIC:</td><td>{bank['bic']}</td></tr>
+                    <tr><td>{labels[2]}:</td><td><strong>{amount_txt}</strong></td></tr>
+                    <tr><td>{labels[3]}:</td><td><strong>{reference}</strong></td></tr>
+                </table>
+                <p style="font-size: 13px; color: #666;">{labels[4]}</p>
+    """
+
+
+def generate_bank_transfer_email(booking: dict, hotel: dict, bank: dict, due_date: str, invoice_link: str, lang: str = "de") -> tuple:
+    """Reservation confirmation with bank transfer instructions for the deposit."""
+    bank_block = bank_details_html(bank, booking['deposit_amount'], booking['booking_number'], lang)
+    if lang == "de":
+        title = "Reservierung – Zahlung per Überweisung"
+        subject = f"Ihre Reservierung {booking['booking_number']} – bitte Anzahlung überweisen"
+        body = f"""
+                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>vielen Dank für Ihre Reservierung im <strong>{hotel['name']}</strong>. Ihr Zimmer ist für Sie vorgemerkt.
+                Die Buchung wird verbindlich, sobald Ihre Anzahlung bei uns eingegangen ist.</p>
+                <table class="info-table">
+                    <tr><td>Buchungsnummer:</td><td>{booking['booking_number']}</td></tr>
+                    <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
+                    <tr><td>Anreise:</td><td>{booking['check_in']}</td></tr>
+                    <tr><td>Abreise:</td><td>{booking['check_out']}</td></tr>
+                    <tr><td>Gesamtpreis:</td><td>{format_price_de(booking['total_price'])} €</td></tr>
+                </table>
+                <div class="amount-box">
+                    <div>Anzahlung (25 %) – bitte überweisen bis {due_date}</div>
+                    <div class="amount">{format_price_de(booking['deposit_amount'])} €</div>
+                </div>
+                {bank_block}
+                <p>Nach Zahlungseingang erhalten Sie Ihre Buchungsbestätigung mit Rechnung per E-Mail. Der Restbetrag von
+                {format_price_de(booking['remaining_amount'])} € ist 6 Wochen vor Anreise fällig.</p>
+                <p style="font-size: 13px; color: #666;">Geht die Anzahlung nicht bis zum {due_date} ein, wird die Reservierung automatisch freigegeben.</p>
+                <p style="text-align: center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Rechnung herunterladen</a></p>
+        """
+    else:
+        title = "Reservation – Payment by Bank Transfer"
+        subject = f"Your reservation {booking['booking_number']} – please transfer the deposit"
+        body = f"""
+                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Thank you for your reservation at <strong>{hotel['name']}</strong>. Your room is being held for you.
+                The booking becomes binding as soon as we receive your deposit.</p>
+                <table class="info-table">
+                    <tr><td>Booking Number:</td><td>{booking['booking_number']}</td></tr>
+                    <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
+                    <tr><td>Check-in:</td><td>{booking['check_in']}</td></tr>
+                    <tr><td>Check-out:</td><td>{booking['check_out']}</td></tr>
+                    <tr><td>Total price:</td><td>€{booking['total_price']:.2f}</td></tr>
+                </table>
+                <div class="amount-box">
+                    <div>Deposit (25%) – please transfer by {due_date}</div>
+                    <div class="amount">€{booking['deposit_amount']:.2f}</div>
+                </div>
+                {bank_block}
+                <p>Once your payment has arrived you will receive your booking confirmation with invoice by email.
+                The remaining balance of €{booking['remaining_amount']:.2f} is due 6 weeks before arrival.</p>
+                <p style="font-size: 13px; color: #666;">If the deposit has not arrived by {due_date}, the reservation is released automatically.</p>
+                <p style="text-align: center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Download Invoice</a></p>
+        """
+    return subject, get_email_header(title, lang) + body + get_email_footer(lang)
+
+
+def generate_transfer_reminder_email(booking: dict, hotel: dict, bank: dict, due_date: str, lang: str = "de") -> tuple:
+    bank_block = bank_details_html(bank, booking['deposit_amount'], booking['booking_number'], lang)
+    if lang == "de":
+        title = "Erinnerung: Anzahlung noch offen"
+        subject = f"Erinnerung – Anzahlung für Reservierung {booking['booking_number']}"
+        body = f"""
+                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>für Ihre Reservierung im <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']}) ist die Anzahlung
+                von <strong>{format_price_de(booking['deposit_amount'])} €</strong> noch nicht bei uns eingegangen.</p>
+                <p>Bitte überweisen Sie den Betrag bis spätestens <strong>{due_date}</strong>, sonst wird das Zimmer wieder freigegeben.
+                Falls Sie bereits überwiesen haben, betrachten Sie diese E-Mail bitte als gegenstandslos.</p>
+                {bank_block}
+        """
+    else:
+        title = "Reminder: deposit still outstanding"
+        subject = f"Reminder – deposit for reservation {booking['booking_number']}"
+        body = f"""
+                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>We have not yet received the deposit of <strong>€{booking['deposit_amount']:.2f}</strong> for your reservation at
+                <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']}).</p>
+                <p>Please transfer the amount by <strong>{due_date}</strong> at the latest, otherwise the room will be released.
+                If you have already paid, please ignore this email.</p>
+                {bank_block}
+        """
+    return subject, get_email_header(title, lang) + body + get_email_footer(lang)
+
+
+def generate_transfer_expired_email(booking: dict, hotel: dict, lang: str = "de") -> tuple:
+    if lang == "de":
+        title = "Reservierung freigegeben"
+        subject = f"Reservierung {booking['booking_number']} wurde freigegeben"
+        body = f"""
+                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>da die Anzahlung für Ihre Reservierung im <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']})
+                nicht innerhalb der Frist eingegangen ist, wurde das Zimmer wieder freigegeben.</p>
+                <p>Sie möchten dennoch buchen? Gern – buchen Sie einfach erneut über unsere Website oder antworten Sie auf diese E-Mail,
+                wir helfen Ihnen weiter.</p>
+        """
+    else:
+        title = "Reservation released"
+        subject = f"Reservation {booking['booking_number']} has been released"
+        body = f"""
+                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>As the deposit for your reservation at <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']})
+                did not arrive within the payment period, the room has been released.</p>
+                <p>Still want to book? Simply book again on our website or reply to this email – we are happy to help.</p>
+        """
+    return subject, get_email_header(title, lang) + body + get_email_footer(lang)
 
 
 def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float, refund_percentage: int, lang: str = "de") -> tuple:

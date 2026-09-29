@@ -1,0 +1,54 @@
+{
+  "summary": "Full test pass of the new 'Zahlung per Überweisung' bank-transfer flow (backend API + admin + scheduler + frontend guest/admin UI). 12/12 pytest cases passed. All key data-testids present on both /booking/h1 and /booking/transfer/:id and /admin/bookings. All acceptance criteria met.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/booking/transfer/:id header", "issues": ["Language toggle text shows the CURRENT language ('DE') rather than the target language ('EN'). Could confuse guests; consider showing the *target* language on the toggle. Not blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bank_transfer.py",
+    "/app/test_reports/pytest/bank_transfer.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is very large (~2941 lines). Bank-transfer section is well isolated but the file overall would benefit from splitting into modules (payments, admin, bookings, scheduler) for maintainability.",
+    "In _reserve_for_transfer the bank-transfer-instructions email is fired via asyncio.create_task (fire-and-forget) so the API returns fast (good), but in process_bank_transfers the reminder/expired emails are awaited sequentially with ~9s SMTP timeouts per booking — with many transfer_pending bookings the scheduler run can take a long time. Consider gathering them concurrently or using asyncio.create_task.",
+    "No unit test coverage for currency/deposit rounding edge cases (fractional nights not possible but different room_types would help)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bank_transfer.py (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% of exercised flows"},
+  "test_credentials": "admin: info@travel-events.de / admin123 (from problem statement, confirmed working via POST /api/admin/login -> 200)",
+  "seed_data_creation": "Created ~19 TEST_* bookings during tests (guest booking, converted bookings, scheduler bookings). Cleaned up at end via mongo (bookings + payment_events + email_logs + payment_transactions). Hotel inventory restored to single=5, double=3.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bank-transfer feature fully functional. Backend regression suite lives at /app/backend/tests/test_bank_transfer.py. Scheduler test (test_scheduler_reminder_and_expire) needs subprocess timeout >=180s because SMTP fails after ~9s per email and the test triggers reminder + expired emails. Local SMTP always fails - email_logs rows are still created with status='failed' - that is expected. Test data prefix used: 'TEST_' and booking numbers HBH-TEST-* / HBH-SCHED-*.",
+  "test_details": {
+    "backend": {
+      "pytest_results": "12 passed in ~55-95s",
+      "tests": [
+        "GET /api/payments/bank-details -> IBAN/BIC/due_days verified",
+        "POST /api/bookings/bank-transfer happy path -> status transfer_pending, method bank_transfer, deposit_amount=75, transfer_due_date ~+7d, inventory decremented, payment_events 'transfer_reserved' logged, email_logs 'bank_transfer_instructions' created with bcc info@travel-events.de (status=failed as expected)",
+        "POST /api/bookings/bank-transfer invalid dates -> 400",
+        "POST /api/bookings/bank-transfer unknown hotel -> 404",
+        "POST /api/bookings/bank-transfer sold out (inventory.single=0) -> 400 with 'ausgebucht'",
+        "POST /api/admin/bookings/{id}/transfer-received without token -> 403",
+        "POST /api/admin/bookings/{id}/transfer-received deposit -> status deposit_paid, payment_transactions{payment_method:bank_transfer, payment_type:deposit, amount:75, status:completed}; repeat -> 400; payment_type:'other' -> 400; then remaining amount 225 -> fully_paid + second transaction",
+        "POST /api/admin/bookings/{id}/convert-to-transfer send_email:false on abandoned -> 200 transfer_pending, inventory decremented, NO new email log; second call -> 400; deposit_paid -> 400",
+        "PUT /api/admin/bookings/{id}/status with status=transfer_pending and status=expired -> 200 (valid_statuses extended)",
+        "process_bank_transfers: reserved_at now-6d -> reminder email log created; reserved_at now-11d -> status expired, inventory +1, 'transfer_expired' event and email log; reserved_at now-2d -> untouched",
+        "Regression: /api/admin/bookings, /api/admin/email-logs, /api/admin/stats all 200"
+      ]
+    },
+    "frontend": {
+      "guest_flow": "Payment switch shows Überweisung tab; clicking bank_transfer reveals bank-transfer-section with info text; submitting without salutation shows validation toast 'Bitte füllen Sie alle Pflichtfelder aus'; filling all fields + submit -> 'Reservierung angelegt' toast and redirect to /booking/transfer/<id>; page shows correct booking number, IBAN DE77100110012713041577, BIC NTSBDEB1XXX, amount 75,00 €, reference == booking number, copy buttons present, download-invoice button returns application/pdf (200); /booking/transfer/does-not-exist shows bank-transfer-error; switching back to PayPal renders paypal container",
+      "admin_flow": "Login works, /admin/bookings loads; bookings-status-filter contains 'Überweisung offen' + 'Abgelaufen' options; transfer_pending rows show orange 'Überweisung offen' badge and 'Fällig bis <date>' with data-testid transfer-due-<id>; green check transfer-received-<id> opens transfer-action-dialog with received-amount prefilled (75); transfer-cancel-btn closes dialog; abandoned/expired rows show convert-transfer-<id> button which opens dialog with convert-send-email checkbox (default checked); confirming with unchecked -> toast 'Reservierung angelegt (ohne E-Mail)' and row becomes 'Überweisung offen'; deposit_paid rows expose remaining-received-<id> (Landmark icon)",
+      "language_toggle_note": "Header toggle displays current language 'DE' rather than target 'EN'; clicking toggle switches language successfully once discovered (minor UX)"
+    }
+  },
+  "rca of the issue": "N/A - no failing functionality discovered"
+}

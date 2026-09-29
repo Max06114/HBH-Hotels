@@ -19,6 +19,9 @@ const TYPE_LABELS = {
     payment_reminder: 'Zahlungserinnerung',
     arrival_reminder: 'Anreise-Erinnerung',
     cancellation: 'Stornierung',
+    bank_transfer_instructions: 'Reservierung / Überweisungsdaten',
+    transfer_reminder: 'Erinnerung Überweisung',
+    transfer_expired: 'Reservierung freigegeben',
     test: 'Test-E-Mail',
     admin_alert: 'Admin-Warnung (Zustellfehler)',
     payment_failure_alert: 'Admin-Warnung (Zahlungsprobleme)',
@@ -31,11 +34,34 @@ const TYPE_LABELS = {
     payment_reminder: 'Payment Reminder',
     arrival_reminder: 'Arrival Reminder',
     cancellation: 'Cancellation',
+    bank_transfer_instructions: 'Reservation / bank details',
+    transfer_reminder: 'Transfer reminder',
+    transfer_expired: 'Reservation released',
     test: 'Test email',
     admin_alert: 'Admin Alert (delivery failure)',
     payment_failure_alert: 'Admin Alert (payment failures)',
     other: 'Other'
   }
+};
+
+const DELIVERY = {
+  sent: { de: 'Übergeben', en: 'Sent', cls: 'bg-gray-100 text-gray-700' },
+  delayed: { de: 'Verzögert', en: 'Delayed', cls: 'bg-amber-100 text-amber-800' },
+  delivered: { de: 'Zugestellt', en: 'Delivered', cls: 'bg-green-100 text-green-800' },
+  opened: { de: 'Geöffnet', en: 'Opened', cls: 'bg-green-200 text-green-900' },
+  bounced: { de: 'Bounce – nicht zustellbar', en: 'Bounced', cls: 'bg-red-100 text-red-800' },
+  complained: { de: 'Als Spam markiert', en: 'Marked as spam', cls: 'bg-red-100 text-red-800' },
+  failed: { de: 'Fehlgeschlagen', en: 'Failed', cls: 'bg-red-100 text-red-800' },
+};
+
+const DeliveryBadge = ({ status, reason, de }) => {
+  const d = DELIVERY[status] || DELIVERY.sent;
+  return (
+    <div>
+      <Badge className={d.cls} title={reason || ''}>{de ? d.de : d.en}</Badge>
+      {reason && <p className="text-xs text-red-600 mt-1 max-w-[180px] truncate" title={reason}>{reason}</p>}
+    </div>
+  );
 };
 
 const EmailLogs = () => {
@@ -158,6 +184,7 @@ const EmailLogs = () => {
                   <TableHead>{de ? 'Typ' : 'Type'}</TableHead>
                   <TableHead>{de ? 'Betreff' : 'Subject'}</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>{de ? 'Zustellung' : 'Delivery'}</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -182,6 +209,11 @@ const EmailLogs = () => {
                         <Badge className="bg-red-100 text-red-800" title={log.error}>{de ? 'Fehler' : 'Failed'}</Badge>
                       )}
                       {log.error && <p className="text-xs text-red-600 mt-1 max-w-xs truncate" title={log.error}>{log.error}</p>}
+                    </TableCell>
+                    <TableCell data-testid={`delivery-status-${log.id}`}>
+                      {log.status === 'sent' && log.provider === 'resend' && (
+                        <DeliveryBadge status={log.delivery_status} reason={log.bounce_reason} de={de} />
+                      )}
                     </TableCell>
                     <TableCell>
                       {log.status === 'failed' && log.booking_id && ['booking_confirmation', 'booking_confirmation_resend'].includes(log.email_type) && (
@@ -212,8 +244,8 @@ const EmailLogs = () => {
         <p className="text-sm text-[#4A4A4A]">
           <strong>Info:</strong>{' '}
           {de
-            ? 'Hier werden alle vom System verschickten E-Mails protokolliert (Bestätigungen, Erinnerungen, Stornierungen). Wenn ein Gast keine E-Mail erhalten hat, prüfen Sie hier, ob sie versendet wurde, und senden Sie die Bestätigung ggf. über die Buchungsliste erneut.'
-            : 'All emails sent by the system are logged here. If a guest did not receive an email, check here whether it was sent and resend the confirmation from the bookings list if needed.'}
+            ? 'Hier werden alle vom System verschickten E-Mails protokolliert. „Zustellung“ zeigt die Rückmeldung von Resend (Zugestellt / Bounce / Spam) – dafür muss in Resend ein Webhook auf /api/webhooks/resend eingerichtet sein. Bei „Bounce“ ist die Adresse meist falsch: Gastdaten korrigieren und Bestätigung erneut senden.'
+            : 'All emails sent by the system are logged here. “Delivery” shows Resend feedback (delivered / bounced / spam) – requires a Resend webhook to /api/webhooks/resend. On “bounced” the address is usually wrong: fix guest details and resend.'}
         </p>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -53,6 +53,7 @@ const BookingEditDialog = ({ booking, language, getAuthHeaders, onClose, onSaved
           <DialogTitle className="font-serif">
             {de ? 'Gastdaten bearbeiten' : 'Edit guest details'} · <span className="font-mono text-sm">{booking?.booking_number}</span>
           </DialogTitle>
+          <DialogDescription>{de ? 'Änderungen werden protokolliert.' : 'Changes are logged.'}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div className="col-span-2">

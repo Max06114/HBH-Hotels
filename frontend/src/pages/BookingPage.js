@@ -13,7 +13,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Calendar } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { CalendarIcon, ArrowLeft, Loader2 } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, Loader2, CreditCard, Landmark } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 
@@ -33,6 +33,40 @@ const BookingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const paypalOrderRef = useRef(null);
+  const [paymentMethod, setPaymentMethod] = useState('paypal');
+
+  const buildBookingData = (method) => ({
+    hotel_id: hotelId,
+    salutation: formData.salutation,
+    first_name: formData.firstName,
+    last_name: formData.lastName,
+    email: formData.email,
+    street: formData.street,
+    postal_code: formData.postalCode,
+    city: formData.city,
+    country: formData.country,
+    room_type: formData.roomType,
+    check_in: format(checkIn, 'yyyy-MM-dd'),
+    check_out: format(checkOut, 'yyyy-MM-dd'),
+    notes: formData.notes,
+    payment_method: method,
+    language
+  });
+
+  const handleBankTransfer = async () => {
+    if (!validateForm()) return;
+    setSubmitting(true);
+    try {
+      const response = await axios.post(`${API}/bookings/bank-transfer`, buildBookingData('bank_transfer'));
+      toast.success(language === 'de' ? 'Reservierung angelegt' : 'Reservation created');
+      navigate(`/booking/transfer/${response.data.booking.id}`);
+    } catch (error) {
+      const msg = error.response?.data?.detail;
+      toast.error(typeof msg === 'string' ? msg : (language === 'de' ? 'Reservierung fehlgeschlagen' : 'Reservation failed'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const reportPayPalEvent = (event, detail, orderId) => {
     const order_id = orderId || paypalOrderRef.current;
@@ -277,8 +311,56 @@ const BookingPage = () => {
 
                     {/* Spacer to prevent calendar overlap */}
                     <div className="pt-4 border-t border-[#E5E0D5]">
-                      {/* PayPal Button */}
                       {priceInfo && (
+                        <div className="grid grid-cols-2 gap-2 mb-5" data-testid="payment-method-switch">
+                          {[
+                            { key: 'paypal', label: language === 'de' ? 'PayPal / Kreditkarte' : 'PayPal / Credit card', Icon: CreditCard },
+                            { key: 'bank_transfer', label: language === 'de' ? 'Überweisung' : 'Bank transfer', Icon: Landmark },
+                          ].map(({ key, label, Icon }) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setPaymentMethod(key)}
+                              className={`flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-medium transition-colors ${
+                                paymentMethod === key ? 'bg-[#6B1D2A] text-white border-[#6B1D2A]' : 'bg-white text-[#1A1A1A] border-[#E5E0D5] hover:border-[#6B1D2A]'
+                              }`}
+                              data-testid={`payment-method-${key}`}
+                            >
+                              <Icon className="w-4 h-4" /> {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {priceInfo && paymentMethod === 'bank_transfer' && (
+                        <div className="mt-2" data-testid="bank-transfer-section">
+                          <div className="bg-[#F5F2EA] rounded-lg p-4 text-sm text-[#4A4A4A] mb-4 space-y-1">
+                            <p>
+                              {language === 'de'
+                                ? `Wir reservieren Ihr Zimmer sofort verbindlich für 7 Tage. Sie überweisen die Anzahlung von ${priceInfo.deposit.toFixed(2).replace('.', ',')} € auf unser Konto; die Bankverbindung erhalten Sie direkt nach der Reservierung und per E-Mail.`
+                                : `We hold your room for 7 days. You transfer the deposit of €${priceInfo.deposit.toFixed(2)} to our account; bank details are shown right after the reservation and sent by email.`}
+                            </p>
+                            <p>
+                              {language === 'de'
+                                ? 'Nach Zahlungseingang erhalten Sie Buchungsbestätigung und Rechnung. Der Restbetrag ist 6 Wochen vor Anreise fällig.'
+                                : 'Once your payment arrives you receive booking confirmation and invoice. The balance is due 6 weeks before arrival.'}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={handleBankTransfer}
+                            disabled={submitting}
+                            className="w-full bg-[#6B1D2A] hover:bg-[#8A2536] text-white rounded-full py-6 text-base"
+                            data-testid="bank-transfer-submit"
+                          >
+                            {submitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Landmark className="w-5 h-5 mr-2" />}
+                            {language === 'de' ? 'Verbindlich reservieren & per Überweisung zahlen' : 'Reserve & pay by bank transfer'}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* PayPal Button */}
+                      {priceInfo && paymentMethod === 'paypal' && (
                         <div className="mt-2">
                           <p className="text-center text-sm text-[#4A4A4A] mb-4">
                             {language === 'de' 
@@ -304,23 +386,7 @@ const BookingPage = () => {
                               
                               try {
                                 setSubmitting(true);
-                                const bookingData = {
-                                  hotel_id: hotelId,
-                                  salutation: formData.salutation,
-                                  first_name: formData.firstName,
-                                  last_name: formData.lastName,
-                                  email: formData.email,
-                                  street: formData.street,
-                                  postal_code: formData.postalCode,
-                                  city: formData.city,
-                                  country: formData.country,
-                                  room_type: formData.roomType,
-                                  check_in: format(checkIn, 'yyyy-MM-dd'),
-                                  check_out: format(checkOut, 'yyyy-MM-dd'),
-                                  notes: formData.notes,
-                                  payment_method: 'paypal',
-                                  language
-                                };
+                                const bookingData = buildBookingData('paypal');
                                 
                                 const response = await axios.post(`${API}/payments/paypal/create-order`, bookingData);
                                 paypalOrderRef.current = response.data.order_id;

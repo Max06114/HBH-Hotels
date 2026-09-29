@@ -1,0 +1,19 @@
+{
+  "summary": "Tested three new features: (1) Resend webhook with Svix HMAC signature verification, (2) admin-edited email templates + arrival reminder job, (3) Dashboard 'Offene Überweisungen' tile. All 14 backend pytest tests pass (webhook signature/JSON/status ranking/bounce, open-transfers auth+shape+sort, custom template render+hotel-override+fallback, resend-confirmation logs, arrival-reminder job candidates & log, scheduler jobs present). Frontend admin verified: dashboard open-transfers-card, summary '1 Reservierungen · 50,00 € erwartet', row with badge 'fällig in 6 Tagen · 6.10.2026', link to /admin/bookings; email-logs page has new 'Zustellung' column, cell for log-test-1 shows 'Bounce – nicht zustellbar' + reason 'Permanent General: mailbox does not exist', failed rows are blank, info box mentions /api/webhooks/resend. Regression: /admin/bookings and /admin/emails load; Speichern button present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_new_features.py", "/app/test_reports/pytest/new_features.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 3094 lines - consider splitting into modules (webhook, templates, scheduler, admin) for maintainability.",
+    "_verify_svix: any() with split(',',1) allows extra fields to be ignored - acceptable for Svix format but consider stricter validation of v1 scheme.",
+    "get_scheduler_status returns hard-coded 'arrival_reminder_schedule: 1 Woche vor Check-in' string - fine but keep in sync if job trigger changes."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin info@travel-events.de / admin123 (memory/test_credentials.md missing - flag)",
+  "seed_data_creation": "Created disposable bank-transfer booking via /api/bookings/bank-transfer for Anna Byrne (needed one open transfer). Test template writes cleaned up in-test. Arrival reminder test bookings TEST_arr_* cleaned up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_new_features.py; run with `/root/venv/bin/python -m pytest tests/test_new_features.py -v` from /app/backend. Existing seeded bounced log-test-1 (provider_message_id re-msg-1) is used by frontend to display Bounce badge. Local SMTP is expected to fail; email_logs still written."
+}

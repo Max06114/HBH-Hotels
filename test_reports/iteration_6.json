@@ -1,0 +1,40 @@
+{
+  "summary": "LIVE verification (Railway backend + Vercel frontend) of PATCH /api/admin/bookings/{id}, corrected email of HBH-20260909-417066, guest-name rendering for HBH-20260927-578BCA, and the 32 booking_confirmation_resend email logs from 2026-09-29. All 6 backend pytest tests pass; frontend behaves as specified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passed_tests": [
+    "PATCH /api/admin/bookings/{id} without Authorization -> 401/403 (NOT 405) - endpoint deployed",
+    "PATCH /api/admin/bookings/{id} with admin token + {\"city\": <current_city>} -> 200 with message 'No changes'",
+    "PATCH /api/admin/bookings/{id} with {\"email\":\"abc\"} -> 422 (Pydantic email validation)",
+    "GET /api/admin/bookings: HBH-20260927-578BCA has first_name='Nancy', last_name='Farrell', email='nancyannfarrell@gmail.com', payment_status='deposit_paid'",
+    "GET /api/admin/bookings: HBH-20260909-417066 has email='inisdom@icloud.com' (previous typo '.cm' corrected)",
+    "GET /api/admin/email-logs?limit=100: 32 entries with email_type='booking_confirmation_resend', all status='sent', provider='resend', has_attachment=true, bcc='info@travel-events.de', sent_at on 2026-09-29 (~15:45-15:50 UTC). 0 failed of that type on that date.",
+    "Frontend admin login OK; /admin/bookings loads (73 bookings total)",
+    "Search '578BCA' -> guest cell inner_text = 'Nancy Farrell\\n\\nnancyannfarrell@gmail.com' -- single space between first and last name (NancyFarrell concatenation NOT reproducible on live)",
+    "Edit dialog opens (data-testid='booking-edit-dialog') with prefilled edit-first_name='Nancy', edit-last_name='Farrell', edit-email='nancyannfarrell@gmail.com'; edit-cancel-btn closes dialog without saving",
+    "Search '417066' -> guest cell shows 'Deirdre Ryan / inisdom@icloud.com' (corrected)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_admin_bookings_patch.py",
+    "/app/test_reports/pytest/pytest_admin_bookings_patch.xml",
+    "/app/test_reports/bookings_578BCA.png",
+    "/app/test_reports/bookings_417066.png"
+  ],
+  "action_items": [
+    "Optional: Address a benign React warning on the edit dialog: 'Missing Description or aria-describedby={undefined} for DialogContent' - add DialogDescription or aria-describedby to BookingEditDialog for a11y."
+  ],
+  "critical_code_review_comments": [
+    "The guest-name display concatenation bug reported by the user is NOT reproducible on the current live frontend (Vercel already shows 'Nancy Farrell' with a proper space). Either the deployed frontend already renders `{first_name} {last_name}` correctly, or the pending whitespace-normalization change is now live. Recommend confirming which build is deployed before considering this closed.",
+    "PATCH endpoint correctly returns 401/403 (not 405) when unauthenticated -- confirms Railway redeploy picked up the new route."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_bookings_patch.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100%"},
+  "test_credentials": {"admin_email": "info@travel-events.de", "admin_password": "admin123"},
+  "seed_data_creation": "None. Only harmless read-only + a same-value PATCH ('No changes').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Live prod: backend https://hbh-hotels-production.up.railway.app/api, frontend https://hbh-hotels.vercel.app. Admin creds info@travel-events.de/admin123. Reusable pytest suites: /app/backend/tests/test_email_logs_resend.py and /app/backend/tests/test_admin_bookings_patch.py. Booking reference field on the API is `booking_number` (not booking_reference). Do NOT click Save in the edit dialog, or the Mail/Ban icons, or the send-test-email button -- they trigger real emails/changes.",
+  "rca of the issue": "'Method not allowed' 405 on save was caused by Railway not having deployed the new PATCH /api/admin/bookings/{id} route; now confirmed present. Guest name 'NancyFarrell' without space: not reproducible on live -- current Vercel build renders with proper space between first_name and last_name."
+}

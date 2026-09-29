@@ -6,6 +6,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
 import base64
+import hmac
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -44,7 +47,14 @@ from services import (
     generate_booking_confirmation_email,
     generate_remaining_payment_confirmation_email,
     generate_payment_reminder_email,
-    generate_cancellation_email
+    generate_cancellation_email,
+    generate_bank_transfer_email,
+    generate_transfer_reminder_email,
+    generate_transfer_expired_email,
+    bank_details_html,
+    generate_arrival_reminder_email,
+    get_email_header,
+    get_email_footer
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -71,6 +81,17 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 EMAIL_FROM = os.environ.get('EMAIL_FROM', SMTP_USER or ADMIN_EMAIL)
 EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'Travel Events')
 EMAIL_PROVIDER = "resend" if RESEND_API_KEY else "smtp"
+
+# Bank transfer (same account as on the invoice PDF)
+BANK_DETAILS = {
+    "holder": os.environ.get('BANK_ACCOUNT_HOLDER', ''),
+    "bank": "N26 Bank",
+    "iban": "DE77100110012713041577",
+    "bic": "NTSBDEB1XXX",
+}
+TRANSFER_DUE_DAYS = 7
+TRANSFER_REMINDER_DAYS = 5
+TRANSFER_EXPIRE_DAYS = 10
 
 # Object Storage Config
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
@@ -190,6 +211,35 @@ async def mark_abandoned_bookings():
         logger.info(f"Marked {result.modified_count} pending bookings as abandoned")
     return {"marked": result.modified_count}
 
+def _de_date(iso: str) -> str:
+    return datetime.fromisoformat(iso).strftime('%d.%m.%Y')
+
+async def process_bank_transfers():
+    """Remind guests with open bank transfers and release expired reservations."""
+    now = datetime.now(timezone.utc)
+    reminded = expired = 0
+    open_transfers = await db.bookings.find({"payment_status": "transfer_pending"}, {"_id": 0}).to_list(1000)
+    for booking in open_transfers:
+        reserved_at = datetime.fromisoformat(booking.get("transfer_reserved_at") or booking["created_at"])
+        age_days = (now - reserved_at).total_seconds() / 86400
+        hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0}) or {"name": booking.get("hotel_name", "")}
+        lang = booking.get("language", "de")
+        if age_days >= TRANSFER_EXPIRE_DAYS:
+            await db.bookings.update_one({"id": booking["id"]}, {"$set": {"payment_status": "expired", "expired_at": now.isoformat()}})
+            await increment_inventory(booking["hotel_id"], booking["room_type"])
+            await log_payment_event(booking, "transfer_expired", f"Anzahlung nicht innerhalb von {TRANSFER_EXPIRE_DAYS} Tagen eingegangen")
+            subject, body = generate_transfer_expired_email(booking, hotel, lang)
+            await send_email(booking["email"], subject, body, email_type="transfer_expired", booking=booking, bcc_admin=True)
+            expired += 1
+        elif age_days >= TRANSFER_REMINDER_DAYS and not booking.get("transfer_reminder_sent_at"):
+            subject, body = generate_transfer_reminder_email(booking, hotel, BANK_DETAILS, _de_date(booking["transfer_due_date"]), lang)
+            if await send_email(booking["email"], subject, body, email_type="transfer_reminder", booking=booking):
+                await db.bookings.update_one({"id": booking["id"]}, {"$set": {"transfer_reminder_sent_at": now.isoformat()}})
+                reminded += 1
+    if reminded or expired:
+        logger.info(f"Bank transfers processed: {reminded} reminded, {expired} expired")
+    return {"reminded": reminded, "expired": expired}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - start scheduler on startup, shutdown on exit."""
@@ -208,6 +258,21 @@ async def lifespan(app: FastAPI):
         name='Abgebrochene Zahlungen markieren (Pending > 24h)',
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc)
+    )
+    scheduler.add_job(
+        send_arrival_reminders,
+        CronTrigger(hour=8, minute=0),
+        id='arrival_reminders',
+        name='Anreise-Erinnerung (7 Tage vor Check-in)',
+        replace_existing=True
+    )
+    scheduler.add_job(
+        process_bank_transfers,
+        IntervalTrigger(hours=6),
+        id='process_bank_transfers',
+        name='Überweisungen: Erinnerung (5 Tage) / Freigabe (10 Tage)',
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2)
     )
     scheduler.start()
     logger.info("Scheduler started - Weekly payment reminders scheduled for Monday 9:00 AM UTC")
@@ -573,7 +638,7 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     
     # Bank details
     footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'), alignment=1)
-    elements.append(Paragraph(f"<b>{t['bank_label']}:</b> N26 Bank · IBAN: DE77100110012713041577 · BIC: NTSBDEB1XXX", footer_style))
+    elements.append(Paragraph(f"<b>{t['bank_label']}:</b> {BANK_DETAILS['bank']} · IBAN: {BANK_DETAILS['iban']} · BIC: {BANK_DETAILS['bic']}", footer_style))
     elements.append(Paragraph("Steuernummer: 110/202/40794 · Ust.Id Nr. / VAT ID No.: DE 229 059 172", footer_style))
     
     doc.build(elements)
@@ -599,7 +664,8 @@ async def send_email(to_email: str, subject: str, body_html: str, attachment: by
     }
     try:
         if EMAIL_PROVIDER == "resend":
-            await _send_via_resend(to_email, recipients, subject, body_html, attachment, attachment_name)
+            log_entry["provider_message_id"] = await _send_via_resend(to_email, recipients, subject, body_html, attachment, attachment_name)
+            log_entry["delivery_status"] = "sent"
         else:
             await _send_via_smtp(to_email, recipients, subject, body_html, attachment, attachment_name)
         logger.info(f"Email sent to {to_email} via {EMAIL_PROVIDER}")
@@ -641,6 +707,10 @@ async def _send_via_resend(to_email, recipients, subject, body_html, attachment,
             raise RuntimeError(f"Resend {resp.status_code}: {err.get('name', '')} {err.get('message', '')}".strip())
         except ValueError:
             raise RuntimeError(f"Resend {resp.status_code}: {resp.text[:200]}")
+    try:
+        return resp.json().get("id")
+    except ValueError:
+        return None
 
 async def _send_via_smtp(to_email, recipients, subject, body_html, attachment, attachment_name):
     msg = MIMEMultipart()
@@ -690,6 +760,80 @@ async def notify_admin_email_failure(to_email: str, subject: str, email_type: st
 def get_invoice_link(booking_id: str) -> str:
     base_url = os.environ.get("FRONTEND_URL", "https://event-payments-3.preview.emergentagent.com")
     return f"{base_url}/invoice/{booking_id}"
+
+# ============== CUSTOM EMAIL TEMPLATES ==============
+
+ROOM_TYPE_LABELS = {
+    "de": {"single": "Einzelzimmer", "double": "Doppelzimmer", "twin": "Zweibettzimmer", "single_comfort": "Einzelzimmer Komfort",
+           "double_comfort": "Doppelzimmer Komfort", "twin_comfort": "Zweibettzimmer Komfort"},
+    "en": {"single": "Single Room", "double": "Double Room", "twin": "Twin Room", "single_comfort": "Single Room Comfort",
+           "double_comfort": "Double Room Comfort", "twin_comfort": "Twin Room Comfort"},
+}
+
+class _SafeDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+async def get_custom_template(hotel_id: str, template_type: str, lang: str) -> Optional[str]:
+    """Admin-edited template text (hotel-specific, then default). None if not set."""
+    key = f"{template_type}_{lang}"
+    for hid in (hotel_id, "default"):
+        doc = await db.email_templates.find_one({"hotel_id": hid}, {"_id": 0})
+        text = (doc or {}).get("templates", {}).get(key)
+        if text and text.strip():
+            return text
+    return None
+
+def render_custom_template(text: str, booking: dict, hotel: dict, lang: str, title: str, extra_html: str = "") -> str:
+    fmt = (lambda v: f"{v:.2f}".replace(".", ",")) if lang == "de" else (lambda v: f"{v:.2f}")
+    values = _SafeDict(
+        salutation=booking.get("salutation", ""), first_name=booking.get("first_name", ""), last_name=booking.get("last_name", ""),
+        hotel_name=hotel.get("name", booking.get("hotel_name", "")), hotel_address=hotel.get("address", ""),
+        booking_number=booking.get("booking_number", ""),
+        room_type=ROOM_TYPE_LABELS.get(lang, ROOM_TYPE_LABELS["de"]).get(booking.get("room_type"), booking.get("room_type", "")),
+        check_in=booking.get("check_in", ""), check_out=booking.get("check_out", ""),
+        total_price=fmt(booking.get("total_price", 0)), deposit_amount=fmt(booking.get("deposit_amount", 0)),
+        remaining_amount=fmt(booking.get("remaining_amount", 0)),
+    )
+    rendered = text.format_map(values)
+    paragraphs = "".join(f"<p>{p.strip().replace(chr(10), '<br>')}</p>" for p in rendered.split("\n\n") if p.strip())
+    return get_email_header(title, lang) + paragraphs + extra_html + get_email_footer(lang)
+
+async def build_confirmation_email(booking: dict, hotel: dict, lang: str) -> tuple:
+    """Booking confirmation: admin template if set, otherwise the standard email."""
+    invoice_link = get_invoice_link(booking["id"])
+    custom = await get_custom_template(booking["hotel_id"], "booking_confirmation", lang)
+    if not custom:
+        return generate_booking_confirmation_email(booking, hotel, lang, invoice_link)
+    subject = f"Buchungsbestätigung - {booking['booking_number']}" if lang == "de" else f"Booking Confirmation - {booking['booking_number']}"
+    title = "Buchungsbestätigung" if lang == "de" else "Booking Confirmation"
+    extra = f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">{"Rechnung herunterladen" if lang == "de" else "Download Invoice"}</a></p>'
+    return subject, render_custom_template(custom, booking, hotel, lang, title, extra)
+
+async def build_arrival_reminder_email(booking: dict, hotel: dict, lang: str) -> tuple:
+    custom = await get_custom_template(booking["hotel_id"], "arrival_reminder", lang)
+    if not custom:
+        return generate_arrival_reminder_email(booking, hotel, lang)
+    subject = f"Ihre Anreise steht bevor - {booking['booking_number']}" if lang == "de" else f"Your arrival is coming up - {booking['booking_number']}"
+    title = "Anreise-Erinnerung" if lang == "de" else "Arrival Reminder"
+    return subject, render_custom_template(custom, booking, hotel, lang, title)
+
+async def send_arrival_reminders():
+    """Arrival reminder 7 days before check-in for paid bookings (once)."""
+    target = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d")
+    bookings = await db.bookings.find({
+        "check_in": target, "payment_status": {"$in": ["deposit_paid", "fully_paid"]}, "arrival_reminder_sent": {"$ne": True}
+    }, {"_id": 0}).to_list(1000)
+    sent = 0
+    for booking in bookings:
+        hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0}) or {"name": booking.get("hotel_name", "")}
+        subject, body = await build_arrival_reminder_email(booking, hotel, booking.get("language", "de"))
+        if await send_email(booking["email"], subject, body, email_type="arrival_reminder", booking=booking):
+            await db.bookings.update_one({"id": booking["id"]}, {"$set": {"arrival_reminder_sent": True, "arrival_reminder_sent_at": datetime.now(timezone.utc).isoformat()}})
+            sent += 1
+    if sent:
+        logger.info(f"Arrival reminders sent: {sent}")
+    return {"sent": sent, "candidates": len(bookings)}
 
 # ============== PAYMENT EVENT LOG ==============
 
@@ -1070,7 +1214,7 @@ async def get_stripe_status(request: Request, session_id: str):
                         updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
                         lang = booking.get("language", "de")
                         pdf = generate_invoice_pdf(updated_booking, hotel, lang)
-                        subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang, get_invoice_link(booking["id"]))
+                        subject, body = await build_confirmation_email(updated_booking, hotel, lang)
                         await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf", email_type="booking_confirmation", booking=booking, bcc_admin=True)
     
     return {
@@ -1147,7 +1291,7 @@ async def create_paypal_order(order_data: PayPalOrderRequest):
         "notes": order_data.notes,
         "payment_status": "pending",
         "payment_method": "paypal",
-        "language": "de",
+        "language": order_data.language or "de",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -1215,6 +1359,149 @@ class PayPalEventRequest(BaseModel):
     booking_id: Optional[str] = None
     event: str
     detail: Optional[str] = None
+
+# ============== BANK TRANSFER ==============
+
+async def _reserve_for_transfer(booking: dict, hotel: dict, send_mail: bool = True) -> dict:
+    """Switch a booking to bank-transfer reservation: block room, set due date, send instructions."""
+    now = datetime.now(timezone.utc)
+    due = now + timedelta(days=TRANSFER_DUE_DAYS)
+    updates = {
+        "payment_status": "transfer_pending",
+        "payment_method": "bank_transfer",
+        "transfer_reserved_at": now.isoformat(),
+        "transfer_due_date": due.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.bookings.update_one({"id": booking["id"]}, {"$set": updates})
+    await decrement_inventory(booking["hotel_id"], booking["room_type"])
+    booking = {**booking, **updates}
+    await log_payment_event(booking, "transfer_reserved", f"Überweisung, Anzahlung {booking['deposit_amount']} € fällig bis {_de_date(due.isoformat())}")
+    if send_mail:
+        lang = booking.get("language", "de")
+        subject, body = generate_bank_transfer_email(booking, hotel, BANK_DETAILS, _de_date(due.isoformat()), get_invoice_link(booking["id"]), lang)
+        asyncio.create_task(send_email(booking["email"], subject, body, email_type="bank_transfer_instructions", booking=booking, bcc_admin=True))
+    return booking
+
+@api_router.get("/payments/bank-details")
+async def get_bank_details():
+    return {**BANK_DETAILS, "due_days": TRANSFER_DUE_DAYS}
+
+@api_router.post("/bookings/bank-transfer")
+async def create_bank_transfer_booking(order_data: PayPalOrderRequest):
+    """Create a reservation paid by bank transfer (deposit due within TRANSFER_DUE_DAYS)."""
+    hotel = await db.hotels.find_one({"id": order_data.hotel_id}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    is_available, _ = check_room_availability(hotel, order_data.room_type)
+    if not is_available:
+        raise HTTPException(status_code=400, detail="Zimmertyp ist ausgebucht / Room type is sold out")
+    nights = calculate_nights(order_data.check_in, order_data.check_out)
+    if nights <= 0:
+        raise HTTPException(status_code=400, detail="Invalid dates")
+    price_per_night = get_room_price(hotel, order_data.room_type)
+    total_price = price_per_night * nights
+    deposit_amount = round(total_price * 0.25, 2)
+    booking = {
+        "id": str(uuid.uuid4()),
+        "booking_number": f"HBH-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}",
+        "invoice_number": await generate_invoice_number(),
+        "hotel_id": order_data.hotel_id,
+        "hotel_name": hotel['name'],
+        "salutation": order_data.salutation,
+        "first_name": order_data.first_name,
+        "last_name": order_data.last_name,
+        "email": order_data.email,
+        "street": order_data.street,
+        "postal_code": order_data.postal_code,
+        "city": order_data.city,
+        "country": order_data.country,
+        "room_type": order_data.room_type,
+        "check_in": order_data.check_in,
+        "check_out": order_data.check_out,
+        "nights": nights,
+        "price_per_night": price_per_night,
+        "total_price": total_price,
+        "deposit_amount": deposit_amount,
+        "remaining_amount": round(total_price - deposit_amount, 2),
+        "notes": order_data.notes,
+        "payment_status": "pending",
+        "payment_method": "bank_transfer",
+        "language": order_data.language or "de",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.bookings.insert_one(booking)
+    booking.pop("_id", None)
+    booking = await _reserve_for_transfer(booking, hotel, send_mail=True)
+    return {"booking": booking, "bank": BANK_DETAILS, "due_date": booking["transfer_due_date"]}
+
+class ConvertToTransferRequest(BaseModel):
+    send_email: bool = True
+
+@api_router.post("/admin/bookings/{booking_id}/convert-to-transfer")
+async def admin_convert_to_transfer(booking_id: str, data: ConvertToTransferRequest, admin: dict = Depends(get_current_admin)):
+    """Turn an aborted PayPal attempt (pending/abandoned/expired) into a bank-transfer reservation."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking["payment_status"] not in ("pending", "abandoned", "expired"):
+        raise HTTPException(status_code=400, detail="Only pending, abandoned or expired bookings can be converted")
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    is_available, _ = check_room_availability(hotel, booking["room_type"])
+    if not is_available:
+        raise HTTPException(status_code=400, detail="Zimmertyp ist ausgebucht")
+    booking = await _reserve_for_transfer(booking, hotel, send_mail=data.send_email)
+    return {"message": "Converted to bank transfer reservation", "booking": booking, "email_sent": data.send_email}
+
+class TransferReceivedRequest(BaseModel):
+    payment_type: str = "deposit"
+    amount: Optional[float] = None
+
+@api_router.post("/admin/bookings/{booking_id}/transfer-received")
+async def admin_transfer_received(booking_id: str, data: TransferReceivedRequest, admin: dict = Depends(get_current_admin)):
+    """Record an incoming bank transfer (deposit or remaining balance) and send the confirmation."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    lang = booking.get("language", "de")
+    now = datetime.now(timezone.utc).isoformat()
+    if data.payment_type == "deposit":
+        if booking["payment_status"] != "transfer_pending":
+            raise HTTPException(status_code=400, detail="Booking is not awaiting a bank transfer deposit")
+        amount = data.amount if data.amount is not None else booking["deposit_amount"]
+        await db.bookings.update_one({"id": booking_id}, {"$set": {"payment_status": "deposit_paid", "deposit_paid_at": now, "updated_at": now}})
+        booking["payment_status"] = "deposit_paid"
+        await db.payment_transactions.insert_one({
+            "id": str(uuid.uuid4()), "booking_id": booking_id, "payment_method": "bank_transfer", "payment_type": "deposit",
+            "amount": amount, "status": "completed", "recorded_by": admin.get("email"), "created_at": now
+        })
+        await log_payment_event(booking, "capture_completed", f"Anzahlung {amount} € per Überweisung erhalten")
+        pdf = generate_invoice_pdf(booking, hotel, lang)
+        subject, body = await build_confirmation_email(booking, hotel, lang)
+        asyncio.create_task(send_email(booking["email"], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf",
+                                       email_type="booking_confirmation", booking=booking, bcc_admin=True))
+    elif data.payment_type == "remaining":
+        if booking["payment_status"] != "deposit_paid":
+            raise HTTPException(status_code=400, detail="Remaining balance can only be recorded for deposit-paid bookings")
+        amount = data.amount if data.amount is not None else booking["remaining_amount"]
+        await db.bookings.update_one({"id": booking_id}, {"$set": {"payment_status": "fully_paid", "fully_paid_at": now, "updated_at": now}})
+        booking["payment_status"] = "fully_paid"
+        await db.payment_transactions.insert_one({
+            "id": str(uuid.uuid4()), "booking_id": booking_id, "payment_method": "bank_transfer", "payment_type": "remaining",
+            "amount": amount, "status": "completed", "recorded_by": admin.get("email"), "created_at": now
+        })
+        await log_payment_event(booking, "capture_completed", f"Restzahlung {amount} € per Überweisung erhalten")
+        subject, body = generate_remaining_payment_confirmation_email(booking, hotel, "bank_transfer", lang)
+        asyncio.create_task(send_email(booking["email"], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True))
+    else:
+        raise HTTPException(status_code=400, detail="payment_type must be 'deposit' or 'remaining'")
+    updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    return {"message": "Payment recorded", "booking": updated}
 
 @api_router.post("/payments/paypal/event")
 async def paypal_client_event(data: PayPalEventRequest):
@@ -1356,7 +1643,7 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                     updated_booking = await db.bookings.find_one({"id": booking["id"]}, {"_id": 0})
                     lang = booking.get("language", "de")
                     pdf = generate_invoice_pdf(updated_booking, hotel, lang)
-                    subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang, get_invoice_link(booking["id"]))
+                    subject, body = await build_confirmation_email(updated_booking, hotel, lang)
                     asyncio.create_task(send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf", email_type="booking_confirmation", booking=booking, bcc_admin=True))
                 
                 await log_payment_event(booking, "capture_completed", f"Anzahlung {booking['deposit_amount']} € erhalten", None, capture_data.order_id)
@@ -1659,7 +1946,7 @@ async def admin_get_all_inventory(admin: dict = Depends(get_current_admin)):
         booked_counts = {}
         bookings = await db.bookings.find({
             "hotel_id": hotel["id"],
-            "payment_status": {"$in": ["deposit_paid", "fully_paid"]}
+            "payment_status": {"$in": ["deposit_paid", "fully_paid", "transfer_pending"]}
         }, {"room_type": 1, "_id": 0}).to_list(1000)
         
         for b in bookings:
@@ -1792,7 +2079,7 @@ async def admin_get_booking(booking_id: str, admin: dict = Depends(get_current_a
 
 @api_router.put("/admin/bookings/{booking_id}/status")
 async def admin_update_booking_status(booking_id: str, status: str, admin: dict = Depends(get_current_admin)):
-    valid_statuses = ["pending", "deposit_paid", "fully_paid", "refunded", "cancelled", "abandoned"]
+    valid_statuses = ["pending", "deposit_paid", "fully_paid", "refunded", "cancelled", "abandoned", "transfer_pending", "expired"]
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
@@ -1856,12 +2143,67 @@ async def admin_resend_confirmation(booking_id: str, admin: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Hotel not found")
     lang = booking.get("language", "de")
     pdf = generate_invoice_pdf(booking, hotel, lang)
-    subject, body = generate_booking_confirmation_email(booking, hotel, lang, get_invoice_link(booking["id"]))
+    subject, body = await build_confirmation_email(booking, hotel, lang)
     success = await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf",
                                email_type="booking_confirmation_resend", booking=booking, bcc_admin=True)
     if not success:
         raise HTTPException(status_code=500, detail="Email could not be sent")
     return {"message": "Confirmation email resent", "to": booking['email']}
+
+@api_router.get("/admin/transfers/open")
+async def admin_open_transfers(admin: dict = Depends(get_current_admin)):
+    """Open bank-transfer reservations sorted by due date (for the dashboard tile)."""
+    items = await db.bookings.find({"payment_status": "transfer_pending"}, {"_id": 0}).sort("transfer_due_date", 1).to_list(500)
+    now = datetime.now(timezone.utc)
+    for b in items:
+        due = datetime.fromisoformat(b["transfer_due_date"]) if b.get("transfer_due_date") else None
+        b["days_left"] = (due - now).days if due else None
+    return {"items": items, "count": len(items), "total_deposit": round(sum(b.get("deposit_amount", 0) for b in items), 2)}
+
+# ============== RESEND WEBHOOK (delivery status) ==============
+
+RESEND_WEBHOOK_SECRET = os.environ.get('RESEND_WEBHOOK_SECRET', '')
+
+def _verify_svix(headers, body: bytes) -> bool:
+    if not RESEND_WEBHOOK_SECRET:
+        return True
+    msg_id, ts, sigs = headers.get("svix-id"), headers.get("svix-timestamp"), headers.get("svix-signature", "")
+    if not (msg_id and ts and sigs):
+        return False
+    secret = RESEND_WEBHOOK_SECRET.split("_", 1)[1] if RESEND_WEBHOOK_SECRET.startswith("whsec_") else RESEND_WEBHOOK_SECRET
+    expected = base64.b64encode(hmac.new(base64.b64decode(secret), f"{msg_id}.{ts}.{body.decode()}".encode(), hashlib.sha256).digest()).decode()
+    return any(hmac.compare_digest(expected, part.split(",", 1)[1]) for part in sigs.split() if "," in part)
+
+RESEND_EVENT_STATUS = {
+    "email.sent": "sent", "email.delivered": "delivered", "email.delivery_delayed": "delayed",
+    "email.bounced": "bounced", "email.complained": "complained", "email.failed": "failed", "email.opened": "opened", "email.clicked": "opened",
+}
+
+@api_router.post("/webhooks/resend")
+async def resend_webhook(request: Request):
+    body = await request.body()
+    if not _verify_svix(request.headers, body):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    try:
+        event = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    status = RESEND_EVENT_STATUS.get(event.get("type"))
+    email_id = (event.get("data") or {}).get("email_id")
+    if not status or not email_id:
+        return {"ignored": True}
+    log = await db.email_logs.find_one({"provider_message_id": email_id}, {"_id": 0, "delivery_status": 1})
+    if not log:
+        return {"ignored": True, "reason": "unknown email_id"}
+    rank = {"sent": 1, "delayed": 2, "delivered": 3, "opened": 4, "bounced": 5, "complained": 5, "failed": 5}
+    if rank.get(status, 0) < rank.get(log.get("delivery_status"), 0):
+        return {"ignored": True, "reason": "older status"}
+    update = {"delivery_status": status, "delivery_updated_at": event.get("created_at") or datetime.now(timezone.utc).isoformat()}
+    bounce = (event.get("data") or {}).get("bounce") or {}
+    if status == "bounced":
+        update["bounce_reason"] = f"{bounce.get('type', '')} {bounce.get('subType', '')}: {bounce.get('message', '')}".strip(" :")
+    await db.email_logs.update_one({"provider_message_id": email_id}, {"$set": update})
+    return {"updated": True, "status": status}
 
 @api_router.get("/admin/email-logs")
 async def admin_get_email_logs(limit: int = 200, admin: dict = Depends(get_current_admin)):
@@ -2194,7 +2536,15 @@ async def send_payment_reminder_with_link(booking: dict, stripe_url: str = None,
     invoice_link = get_invoice_link(booking["id"])
     
     lang = booking.get("language", "de")
-    subject, body = generate_payment_reminder_email(booking, hotel, stripe_url, paypal_url, invoice_link, lang)
+    bank_html = bank_details_html(BANK_DETAILS, booking["remaining_amount"], booking["booking_number"], lang)
+    custom = await get_custom_template(booking["hotel_id"], "payment_reminder", lang)
+    if custom:
+        subject = "Zahlungserinnerung - Restzahlung für Ihre Hotelbuchung" if lang == "de" else "Payment Reminder - Remaining Balance for Your Hotel Booking"
+        links = f'<div style="text-align: center; margin: 30px 0;"><a href="{paypal_url}" class="btn btn-paypal">{"Mit PayPal bezahlen" if lang == "de" else "Pay with PayPal"}</a></div>' if paypal_url else ""
+        extra = links + bank_html + f'<p style="text-align: center;"><a href="{invoice_link}" class="btn btn-secondary">{"Rechnung herunterladen" if lang == "de" else "Download Invoice"}</a></p>'
+        body = render_custom_template(custom, booking, hotel, lang, "Zahlungserinnerung" if lang == "de" else "Payment Reminder", extra)
+    else:
+        subject, body = generate_payment_reminder_email(booking, hotel, stripe_url, paypal_url, invoice_link, lang, bank_html)
     
     try:
         await send_email(booking['email'], subject, body, email_type="payment_reminder", booking=booking)

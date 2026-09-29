@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Download, Ban, Loader2, Mail, Search, Pencil } from 'lucide-react';
+import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
+import TransferActionDialog from './TransferActionDialog';
 import { getPaymentEventLabel } from './utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -31,6 +32,7 @@ const BookingsManagement = () => {
   const [exporting, setExporting] = useState(false);
   const [resendingId, setResendingId] = useState(null);
   const [editingBooking, setEditingBooking] = useState(null);
+  const [transferAction, setTransferAction] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [hotelFilter, setHotelFilter] = useState('all');
@@ -138,6 +140,8 @@ const BookingsManagement = () => {
       refunded: { label: t('refunded'), className: 'bg-purple-100 text-purple-800' },
       cancelled: { label: t('cancelled'), className: 'bg-red-100 text-red-800' },
       abandoned: { label: language === 'de' ? 'Abgebrochen' : 'Abandoned', className: 'bg-gray-100 text-gray-600' },
+      transfer_pending: { label: language === 'de' ? 'Überweisung offen' : 'Transfer pending', className: 'bg-orange-100 text-orange-800' },
+      expired: { label: language === 'de' ? 'Abgelaufen' : 'Expired', className: 'bg-gray-200 text-gray-700' },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return <Badge className={config.className}>{config.label}</Badge>;
@@ -195,7 +199,9 @@ const BookingsManagement = () => {
             <SelectItem value="all">{language === 'de' ? 'Alle Status' : 'All statuses'}</SelectItem>
             <SelectItem value="deposit_paid">{t('depositPaid')}</SelectItem>
             <SelectItem value="fully_paid">{t('fullyPaid')}</SelectItem>
+            <SelectItem value="transfer_pending">{language === 'de' ? 'Überweisung offen' : 'Transfer pending'}</SelectItem>
             <SelectItem value="pending">{t('pending')}</SelectItem>
+            <SelectItem value="expired">{language === 'de' ? 'Abgelaufen' : 'Expired'}</SelectItem>
             <SelectItem value="abandoned">{language === 'de' ? 'Abgebrochen' : 'Abandoned'}</SelectItem>
             <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
             <SelectItem value="refunded">{t('refunded')}</SelectItem>
@@ -228,7 +234,7 @@ const BookingsManagement = () => {
                     <TableCell className="font-mono text-sm">{booking.booking_number}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{booking.first_name} {booking.last_name}</p>
+                        <p className="font-medium">{`${booking.first_name || ''} ${booking.last_name || ''}`.replace(/\s+/g, ' ').trim()}</p>
                         <p className="text-sm text-[#4A4A4A]">{booking.email}</p>
                       </div>
                     </TableCell>
@@ -238,7 +244,13 @@ const BookingsManagement = () => {
                     <TableCell className="font-semibold">{formatPrice(booking.total_price)} €</TableCell>
                     <TableCell>
                       {getStatusBadge(booking.payment_status)}
-                      {['pending', 'abandoned'].includes(booking.payment_status) && booking.last_payment_event && (
+                      {booking.payment_status === 'transfer_pending' && booking.transfer_due_date && (
+                        <p className="text-xs text-[#4A4A4A] mt-1" data-testid={`transfer-due-${booking.id}`}>
+                          {language === 'de' ? 'Fällig bis ' : 'Due by '}{new Date(booking.transfer_due_date).toLocaleDateString('de-DE')}
+                          {booking.transfer_reminder_sent_at ? (language === 'de' ? ' · erinnert' : ' · reminded') : ''}
+                        </p>
+                      )}
+                      {['pending', 'abandoned', 'expired'].includes(booking.payment_status) && booking.last_payment_event && (
                         <p
                           className="text-xs text-[#4A4A4A] mt-1 max-w-[220px]"
                           title={booking.last_payment_event.paypal_error?.message || booking.last_payment_event.detail || ''}
@@ -258,6 +270,36 @@ const BookingsManagement = () => {
                         >
                           <Download className="w-4 h-4" />
                         </Button>
+                        {['pending', 'abandoned', 'expired'].includes(booking.payment_status) && (
+                          <Button
+                            variant="ghost" size="sm" className="text-orange-700"
+                            onClick={() => setTransferAction({ booking, type: 'convert' })}
+                            title={language === 'de' ? 'In Überweisungs-Reservierung umwandeln' : 'Convert to bank transfer reservation'}
+                            data-testid={`convert-transfer-${booking.id}`}
+                          >
+                            <Landmark className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {booking.payment_status === 'transfer_pending' && (
+                          <Button
+                            variant="ghost" size="sm" className="text-green-700"
+                            onClick={() => setTransferAction({ booking, type: 'deposit' })}
+                            title={language === 'de' ? 'Anzahlung erhalten' : 'Deposit received'}
+                            data-testid={`transfer-received-${booking.id}`}
+                          >
+                            <BadgeCheck className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {booking.payment_status === 'deposit_paid' && (
+                          <Button
+                            variant="ghost" size="sm" className="text-green-700"
+                            onClick={() => setTransferAction({ booking, type: 'remaining' })}
+                            title={language === 'de' ? 'Restzahlung per Überweisung erhalten' : 'Remaining balance received by transfer'}
+                            data-testid={`remaining-received-${booking.id}`}
+                          >
+                            <Landmark className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -280,7 +322,7 @@ const BookingsManagement = () => {
                             {resendingId === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                           </Button>
                         )}
-                        {!['cancelled', 'abandoned'].includes(booking.payment_status) && (
+                        {!['cancelled', 'abandoned', 'expired'].includes(booking.payment_status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -327,6 +369,16 @@ const BookingsManagement = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <TransferActionDialog
+        action={transferAction}
+        language={language}
+        getAuthHeaders={getAuthHeaders}
+        onClose={() => setTransferAction(null)}
+        onDone={(updated) => {
+          setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          setTransferAction(null);
+        }}
+      />
       <BookingEditDialog
         booking={editingBooking}
         language={language}

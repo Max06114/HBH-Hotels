@@ -133,7 +133,7 @@ const RemindersManagement = () => {
                     <TableCell className="font-mono text-sm">{booking.booking_number}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{booking.first_name} {booking.last_name}</p>
+                        <p className="font-medium">{`${booking.first_name || ''} ${booking.last_name || ''}`.replace(/\s+/g, ' ').trim()}</p>
                         <p className="text-sm text-[#4A4A4A]">{booking.email}</p>
                       </div>
                     </TableCell>

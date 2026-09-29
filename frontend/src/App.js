@@ -8,6 +8,7 @@ import HomePage from "./pages/HomePage";
 import BookingPage from "./pages/BookingPage";
 import ConfirmationPage from "./pages/ConfirmationPage";
 import InvoicePage from "./pages/InvoicePage";
+import BankTransferPage from "./pages/BankTransferPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 
@@ -21,6 +22,7 @@ function App() {
             <Route path="/booking/:hotelId" element={<BookingPage />} />
             <Route path="/booking/confirmation" element={<ConfirmationPage />} />
             <Route path="/invoice/:bookingId" element={<InvoicePage />} />
+            <Route path="/booking/transfer/:bookingId" element={<BankTransferPage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/admin/*" element={<AdminDashboard />} />
           </Routes>

@@ -51,6 +51,10 @@ export const getPaymentStatusColor = (status) => {
       return 'bg-red-100 text-red-800';
     case 'abandoned':
       return 'bg-gray-100 text-gray-600';
+    case 'transfer_pending':
+      return 'bg-orange-100 text-orange-800';
+    case 'expired':
+      return 'bg-gray-200 text-gray-700';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -70,7 +74,9 @@ export const getPaymentStatusLabel = (status, language = 'de') => {
       pending: 'Ausstehend',
       refunded: 'Erstattet',
       cancelled: 'Storniert',
-      abandoned: 'Abgebrochen'
+      abandoned: 'Abgebrochen',
+      transfer_pending: 'Überweisung offen',
+      expired: 'Abgelaufen'
     },
     en: {
       fully_paid: 'Fully Paid',
@@ -78,7 +84,9 @@ export const getPaymentStatusLabel = (status, language = 'de') => {
       pending: 'Pending',
       refunded: 'Refunded',
       cancelled: 'Cancelled',
-      abandoned: 'Abandoned'
+      abandoned: 'Abandoned',
+      transfer_pending: 'Transfer pending',
+      expired: 'Expired'
     }
   };
   return labels[language]?.[status] || status;
@@ -128,7 +136,9 @@ const PAYMENT_EVENT_LABELS = {
     cancelled: 'Vom Gast im PayPal-Fenster abgebrochen',
     paypal_error: 'Fehler im PayPal-Fenster',
     capture_failed: 'Zahlung von PayPal abgelehnt',
-    capture_completed: 'Zahlung erfolgreich'
+    capture_completed: 'Zahlung erfolgreich',
+    transfer_reserved: 'Reserviert – Überweisung ausstehend',
+    transfer_expired: 'Überweisung nicht eingegangen – freigegeben'
   },
   en: {
     booking_created: 'Booking created, PayPal not opened',
@@ -137,7 +147,9 @@ const PAYMENT_EVENT_LABELS = {
     cancelled: 'Cancelled by guest in PayPal window',
     paypal_error: 'Error in PayPal window',
     capture_failed: 'Payment declined by PayPal',
-    capture_completed: 'Payment successful'
+    capture_completed: 'Payment successful',
+    transfer_reserved: 'Reserved – bank transfer pending',
+    transfer_expired: 'Transfer not received – released'
   }
 };
 

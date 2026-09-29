@@ -211,3 +211,4 @@ class PayPalOrderRequest(BaseModel):
     check_out: str
     notes: str = ""
     payment_method: str = "paypal"
+    language: str = "de"
