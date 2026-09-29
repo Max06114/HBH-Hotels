@@ -81,7 +81,7 @@ def format_price_de(amount: float) -> str:
     return f"{amount:.2f}".replace('.', ',')
 
 
-def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = "de", invoice_link: str = None) -> tuple:
+def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = "de", invoice_link: str = None, extra_html: str = "") -> tuple:
     """Generate booking confirmation email with invoice."""
     deposit_formatted = format_price_de(booking['deposit_amount'])
     remaining_formatted = format_price_de(booking['remaining_amount'])
@@ -116,6 +116,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
                 
                 <p>Ihre Rechnung finden Sie im Anhang dieser E-Mail.</p>
                 {f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Rechnung herunterladen</a><br><span style="font-size: 12px; color: #999;">Über diesen Link können Sie Ihre Rechnung jederzeit erneut herunterladen.</span></p>' if invoice_link else ''}
+                {extra_html}
         """
     else:
         title = "Booking Confirmation"
@@ -146,6 +147,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
                 
                 <p>Please find your invoice attached to this email.</p>
                 {f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Download Invoice</a><br><span style="font-size: 12px; color: #999;">You can use this link to download your invoice again at any time.</span></p>' if invoice_link else ''}
+                {extra_html}
         """
     
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)

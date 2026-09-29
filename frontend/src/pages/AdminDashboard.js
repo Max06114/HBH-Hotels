@@ -17,7 +17,8 @@ import {
   AnalyticsDashboard,
   ContentSettings,
   EmailTemplates,
-  EmailLogs
+  EmailLogs,
+  TransferManagement
 } from '../components/admin';
 
 // Main Admin Dashboard
@@ -65,6 +66,7 @@ const AdminDashboard = () => {
           <Route path="content" element={<ContentSettings />} />
           <Route path="emails" element={<EmailTemplates />} />
           <Route path="email-logs" element={<EmailLogs />} />
+          <Route path="transfer" element={<TransferManagement />} />
           <Route path="images" element={<ImageManager />} />
           <Route path="payments" element={<PaymentsManagement />} />
           <Route path="reminders" element={<RemindersManagement />} />

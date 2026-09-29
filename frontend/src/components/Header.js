@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Globe, Menu, X, Music, Map } from 'lucide-react';
+import { Globe, Menu, X, Music, Map, Bus } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useState } from 'react';
 
@@ -85,6 +85,10 @@ const Header = () => {
               <Map className="w-4 h-4" />
               {language === 'de' ? 'Karte' : 'Map'}
             </button>
+            <Link to="/transfer" className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium flex items-center gap-1" data-testid="nav-transfer">
+              <Bus className="w-4 h-4" />
+              Airport Transfer
+            </Link>
             {isAuthenticated && (
               <Link to="/admin" className="text-[#1A1A1A] hover:text-[#6B1D2A] transition-colors font-medium" data-testid="nav-admin">
                 {t('admin')}
@@ -146,6 +150,10 @@ const Header = () => {
                 <Map className="w-4 h-4" />
                 {language === 'de' ? 'Karte' : 'Map'}
               </button>
+              <Link to="/transfer" className="text-left text-[#1A1A1A] hover:text-[#6B1D2A] font-medium flex items-center gap-1" data-testid="nav-transfer-mobile">
+                <Bus className="w-4 h-4" />
+                Airport Transfer
+              </Link>
               {isAuthenticated ? (
                 <>
                   <Link to="/admin" className="text-[#1A1A1A] hover:text-[#6B1D2A] font-medium" onClick={() => setMobileMenuOpen(false)}>

@@ -12,3 +12,4 @@ export { default as AnalyticsDashboard } from './AnalyticsDashboard';
 export { default as ContentSettings } from './ContentSettings';
 export { default as EmailTemplates } from './EmailTemplates';
 export { default as EmailLogs } from './EmailLogs';
+export { default as TransferManagement } from './TransferManagement';

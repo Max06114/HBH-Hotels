@@ -212,6 +212,12 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - `sync_hotel_sold_out_state()` nach decrement/increment_inventory und Admin-Inventar-Update: alle Kategorien 0 → `active=false, auto_deactivated=true` + Admin-Mail `hotel_sold_out`; wieder frei → automatische Reaktivierung + Mail `hotel_reactivated` (nur wenn auto_deactivated). Manuelles Aktivieren (PUT /admin/hotels/{id}) setzt auto_deactivated zurück. Hotel-Model: `auto_deactivated`. HotelsManagement-Badge „Ausgebucht – automatisch deaktiviert“
   - Buchungsliste: Spalte „Zimmer“ (EZ/DZ/TWIN/… Komfort, `getRoomTypeShort`), Suche matcht Kürzel
   - LIVE-HINWEIS: „4* Hotel the niu Ridge“ ist aktiv, hat aber Kontingent 0 in allen Kategorien → aktuell nicht buchbar (Nutzer informiert)
+- **2026-06 (Fork)**: Airport-Transfer Stufe 1 – Bedarfserhebung (selbst getestet per curl + Screenshots; kein testing_agent)
+  - Collections `transfer_contacts` (token, source booking|import|public, booking_id, invited_at/reminded_at/responded_at) und `transfer_responses` (Flugdaten, persons, companions, interest outbound|return|both|none); Settings `db.settings{key:"transfer"}` (deadline, price 55, status survey|offer|closed, intro EN)
+  - Public: `GET /api/transfer/settings`, `GET /api/transfer/form/{token}`, `POST /api/transfer/respond`; Seite `/transfer` und `/transfer/:token` (`TransferPage.js`, Englisch), Header-Link „Airport Transfer“
+  - Admin `/admin/transfer` (`TransferManagement.js`): Zähler (Kontakte, Eingeladen, Antworten, Personen per Flug, Interesse Hin/Rück), Einstellungen, „Hotelbuchungen übernehmen“ (`POST /admin/transfer/sync-bookings`), Import Name/E-Mail (`/import`), „Umfrage senden“ + „Erinnerung“ (`/send-survey`, E-Mail-Typ transfer_survey), CSV (`/export`), Tabelle mit Filtern
+  - Bestätigungs-E-Mail enthält Transfer-Block mit persönlichem Link, solange Status „survey“ (`transfer_confirmation_block`, Contact wird beim Versand angelegt)
+  - OFFEN Stufe 2: Fahrten anlegen, Angebot/Bahn-Empfehlung senden, Buchung 55 €×Personen×Strecken (PayPal/Überweisung), Ticket-PDF, Buslisten, Diskrepanz Interesse vs. Buchung
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

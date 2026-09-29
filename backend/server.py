@@ -845,12 +845,20 @@ def render_custom_template(text: str, booking: dict, hotel: dict, lang: str, tit
 async def build_confirmation_email(booking: dict, hotel: dict, lang: str) -> tuple:
     """Booking confirmation: admin template if set, otherwise the standard email."""
     invoice_link = get_invoice_link(booking["id"])
+    transfer_html = ""
+    try:
+        t_settings = await get_transfer_settings()
+        if t_settings.get("status") == "survey":
+            contact = await get_or_create_transfer_contact(booking["email"], f"{booking['first_name']} {booking['last_name']}", "booking", booking)
+            transfer_html = transfer_confirmation_block(contact["token"], t_settings)
+    except Exception as e:
+        logger.warning(f"Transfer block skipped: {e}")
     custom = await get_custom_template(booking["hotel_id"], "booking_confirmation", lang)
     if not custom:
-        return generate_booking_confirmation_email(booking, hotel, lang, invoice_link)
+        return generate_booking_confirmation_email(booking, hotel, lang, invoice_link, transfer_html)
     subject = f"Buchungsbestätigung - {booking['booking_number']}" if lang == "de" else f"Booking Confirmation - {booking['booking_number']}"
     title = "Buchungsbestätigung" if lang == "de" else "Booking Confirmation"
-    extra = f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">{"Rechnung herunterladen" if lang == "de" else "Download Invoice"}</a></p>'
+    extra = f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">{"Rechnung herunterladen" if lang == "de" else "Download Invoice"}</a></p>' + transfer_html
     return subject, render_custom_template(custom, booking, hotel, lang, title, extra)
 
 async def build_arrival_reminder_email(booking: dict, hotel: dict, lang: str) -> tuple:
@@ -2253,6 +2261,217 @@ async def resend_webhook(request: Request):
         update["bounce_reason"] = f"{bounce.get('type', '')} {bounce.get('subType', '')}: {bounce.get('message', '')}".strip(" :")
     await db.email_logs.update_one({"provider_message_id": email_id}, {"$set": update})
     return {"updated": True, "status": status}
+
+# ============== AIRPORT TRANSFER SURVEY (Stage 1) ==============
+
+TRANSFER_DEFAULTS = {"key": "transfer", "deadline": "2027-01-15", "price": 55.0, "status": "survey",
+                     "intro": "Many guests fly into Berlin (BER). If enough guests are interested, we will organise a bus transfer Berlin BER ↔ Halle for €55 per person per way. Please tell us your travel plans – this is not a booking yet."}
+
+async def get_transfer_settings() -> dict:
+    doc = await db.settings.find_one({"key": "transfer"}, {"_id": 0})
+    return {**TRANSFER_DEFAULTS, **(doc or {})}
+
+def transfer_link(token: str) -> str:
+    return f"{os.environ.get('FRONTEND_URL', 'https://event-payments-3.preview.emergentagent.com')}/transfer/{token}"
+
+async def get_or_create_transfer_contact(email: str, name: str, source: str, booking: dict = None) -> dict:
+    email = email.strip().lower()
+    contact = await db.transfer_contacts.find_one({"email": email}, {"_id": 0})
+    if contact:
+        if booking and not contact.get("booking_id"):
+            upd = {"booking_id": booking["id"], "hotel_name": booking.get("hotel_name"), "check_in": booking.get("check_in"), "check_out": booking.get("check_out"), "source": "booking"}
+            await db.transfer_contacts.update_one({"id": contact["id"]}, {"$set": upd})
+            contact.update(upd)
+        return contact
+    contact = {
+        "id": str(uuid.uuid4()), "token": uuid.uuid4().hex, "email": email, "name": name.strip(), "source": source,
+        "booking_id": booking["id"] if booking else None, "hotel_name": booking.get("hotel_name") if booking else None,
+        "check_in": booking.get("check_in") if booking else None, "check_out": booking.get("check_out") if booking else None,
+        "invited_at": None, "reminded_at": None, "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.transfer_contacts.insert_one(contact)
+    contact.pop("_id", None)
+    return contact
+
+def transfer_survey_email(contact: dict, settings: dict, reminder: bool = False) -> tuple:
+    deadline = datetime.fromisoformat(settings["deadline"]).strftime("%d %B %Y")
+    first = (contact.get("name") or "").split(" ")[0] or "Guest"
+    subject = ("Reminder: " if reminder else "") + "Airport transfer Berlin ↔ Halle – tell us your travel plans"
+    body = f"""
+                <p>Dear {first},</p>
+                <p>{settings['intro']}</p>
+                <p>Please fill in the short form with your flight details (arrival and departure) and let us know whether you would be interested
+                in the bus transfer. <strong>Please reply by {deadline}.</strong></p>
+                <p style="text-align:center; margin: 30px 0;"><a href="{transfer_link(contact['token'])}" class="btn btn-primary">Open transfer form</a></p>
+                <p style="font-size: 13px; color: #666;">After the deadline we will review all replies. If there are enough participants, you will receive an email with the
+                fixed bus times and a booking link (payment €{settings['price']:.0f} per person per way). Otherwise we will recommend travelling by train (bahn.de).</p>
+    """
+    return subject, get_email_header("Airport Transfer Survey", "en") + body + get_email_footer("en")
+
+def transfer_confirmation_block(token: str, settings: dict) -> str:
+    deadline = datetime.fromisoformat(settings["deadline"]).strftime("%d.%m.%Y")
+    return f"""
+                <h3 style="margin-top: 30px;">Airport transfer Berlin ↔ Halle</h3>
+                <p style="font-size: 14px;">Flying into Berlin? We are collecting travel plans for a possible bus transfer (€{settings['price']:.0f} per person per way).
+                Please tell us your flight details by {deadline} – this is not a booking yet.</p>
+                <p style="text-align:center;"><a href="{transfer_link(token)}" class="btn btn-secondary">Transfer form</a></p>
+    """
+
+class TransferResponseIn(BaseModel):
+    token: Optional[str] = None
+    name: str
+    email: EmailStr
+    arrives_by_plane: bool = True
+    airport: Optional[str] = "BER"
+    arrival_date: Optional[str] = None
+    arrival_time: Optional[str] = None
+    arrival_flight: Optional[str] = None
+    departure_date: Optional[str] = None
+    departure_time: Optional[str] = None
+    departure_flight: Optional[str] = None
+    persons: int = 1
+    companions: List[str] = []
+    interest: str = "both"  # outbound | return | both | none
+    notes: Optional[str] = None
+
+@api_router.get("/transfer/settings")
+async def public_transfer_settings():
+    s = await get_transfer_settings()
+    return {"deadline": s["deadline"], "price": s["price"], "status": s["status"], "intro": s["intro"]}
+
+@api_router.get("/transfer/form/{token}")
+async def public_transfer_form(token: str):
+    contact = await db.transfer_contacts.find_one({"token": token}, {"_id": 0})
+    if not contact:
+        raise HTTPException(status_code=404, detail="Link not found")
+    response = await db.transfer_responses.find_one({"contact_id": contact["id"]}, {"_id": 0})
+    return {"contact": {k: contact.get(k) for k in ("name", "email", "hotel_name", "check_in", "check_out")}, "response": response}
+
+@api_router.post("/transfer/respond")
+async def public_transfer_respond(data: TransferResponseIn):
+    if data.interest not in ("outbound", "return", "both", "none"):
+        raise HTTPException(status_code=400, detail="Invalid interest")
+    if data.persons < 1 or data.persons > 20:
+        raise HTTPException(status_code=400, detail="persons must be 1-20")
+    contact = await db.transfer_contacts.find_one({"token": data.token}, {"_id": 0}) if data.token else None
+    if not contact:
+        contact = await get_or_create_transfer_contact(data.email, data.name, "public")
+    now = datetime.now(timezone.utc).isoformat()
+    payload = data.model_dump(exclude={"token"})
+    payload["companions"] = [c.strip() for c in data.companions if c.strip()][: max(0, data.persons - 1)]
+    payload.update({"contact_id": contact["id"], "email": contact["email"], "updated_at": now})
+    existing = await db.transfer_responses.find_one({"contact_id": contact["id"]}, {"_id": 0, "id": 1})
+    if existing:
+        await db.transfer_responses.update_one({"id": existing["id"]}, {"$set": payload})
+    else:
+        payload.update({"id": str(uuid.uuid4()), "submitted_at": now})
+        await db.transfer_responses.insert_one(payload)
+    await db.transfer_contacts.update_one({"id": contact["id"]}, {"$set": {"responded_at": now, "name": data.name.strip() or contact["name"]}})
+    return {"message": "Thank you – your travel plans have been saved.", "token": contact["token"]}
+
+class TransferSettingsIn(BaseModel):
+    deadline: Optional[str] = None
+    price: Optional[float] = None
+    status: Optional[str] = None
+    intro: Optional[str] = None
+
+@api_router.get("/admin/transfer/overview")
+async def admin_transfer_overview(admin: dict = Depends(get_current_admin)):
+    settings = await get_transfer_settings()
+    contacts = await db.transfer_contacts.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    responses = {r["contact_id"]: r for r in await db.transfer_responses.find({}, {"_id": 0}).to_list(5000)}
+    rows = [{**c, "response": responses.get(c["id"])} for c in contacts]
+    flyers = [r for r in responses.values() if r.get("arrives_by_plane")]
+    stats = {
+        "contacts": len(contacts), "invited": sum(1 for c in contacts if c.get("invited_at")),
+        "responded": len(responses), "by_plane_persons": sum(r.get("persons", 1) for r in flyers),
+        "interest_outbound": sum(r.get("persons", 1) for r in flyers if r.get("interest") in ("outbound", "both")),
+        "interest_return": sum(r.get("persons", 1) for r in flyers if r.get("interest") in ("return", "both")),
+        "no_interest": sum(1 for r in responses.values() if r.get("interest") == "none" or not r.get("arrives_by_plane")),
+    }
+    return {"settings": settings, "stats": stats, "rows": rows}
+
+@api_router.put("/admin/transfer/settings")
+async def admin_transfer_settings(data: TransferSettingsIn, admin: dict = Depends(get_current_admin)):
+    upd = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "status" in upd and upd["status"] not in ("survey", "offer", "closed"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    await db.settings.update_one({"key": "transfer"}, {"$set": {**upd, "key": "transfer"}}, upsert=True)
+    return await get_transfer_settings()
+
+class TransferImportIn(BaseModel):
+    text: str
+
+@api_router.post("/admin/transfer/import")
+async def admin_transfer_import(data: TransferImportIn, admin: dict = Depends(get_current_admin)):
+    """Import 'Name, email' or 'Name; email' or 'email' per line."""
+    import re
+    created = skipped = 0
+    for line in data.text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", line)
+        if not m:
+            skipped += 1
+            continue
+        email = m.group(0).lower()
+        name = re.sub(r"[,;<>\t]", " ", line.replace(m.group(0), "")).strip() or email.split("@")[0]
+        if await db.transfer_contacts.find_one({"email": email}):
+            skipped += 1
+            continue
+        await get_or_create_transfer_contact(email, name, "import")
+        created += 1
+    return {"created": created, "skipped": skipped}
+
+@api_router.post("/admin/transfer/sync-bookings")
+async def admin_transfer_sync_bookings(admin: dict = Depends(get_current_admin)):
+    """Create transfer contacts for all bookings that are not cancelled/abandoned/expired."""
+    bookings = await db.bookings.find({"payment_status": {"$nin": ["cancelled", "abandoned", "expired", "refunded"]}}, {"_id": 0}).to_list(5000)
+    before = await db.transfer_contacts.count_documents({})
+    for b in bookings:
+        await get_or_create_transfer_contact(b["email"], f"{b['first_name']} {b['last_name']}", "booking", b)
+    return {"bookings": len(bookings), "created": await db.transfer_contacts.count_documents({}) - before}
+
+class TransferSendIn(BaseModel):
+    only_unanswered: bool = False
+    only_not_invited: bool = True
+
+@api_router.post("/admin/transfer/send-survey")
+async def admin_transfer_send_survey(data: TransferSendIn, admin: dict = Depends(get_current_admin)):
+    settings = await get_transfer_settings()
+    query = {}
+    if data.only_unanswered:
+        query["responded_at"] = {"$exists": False}
+    if data.only_not_invited:
+        query["invited_at"] = None
+    contacts = await db.transfer_contacts.find(query, {"_id": 0}).to_list(5000)
+    sent = failed = 0
+    for c in contacts:
+        subject, body = transfer_survey_email(c, settings, reminder=data.only_unanswered and bool(c.get("invited_at")))
+        ok = await send_email(c["email"], subject, body, email_type="transfer_survey", booking={"id": c.get("booking_id"), "booking_number": c.get("hotel_name") or c["source"]})
+        if ok:
+            field = "reminded_at" if c.get("invited_at") else "invited_at"
+            await db.transfer_contacts.update_one({"id": c["id"]}, {"$set": {field: datetime.now(timezone.utc).isoformat()}})
+            sent += 1
+        else:
+            failed += 1
+    return {"sent": sent, "failed": failed, "total": len(contacts)}
+
+@api_router.get("/admin/transfer/export")
+async def admin_transfer_export(admin: dict = Depends(get_current_admin)):
+    import csv
+    from io import StringIO
+    data = await admin_transfer_overview(admin)
+    out = StringIO(); w = csv.writer(out, delimiter=";")
+    w.writerow(["Name", "Email", "Source", "Hotel", "Check-in", "Check-out", "Invited", "Responded", "By plane", "Airport", "Arrival date", "Arrival time", "Arrival flight",
+                "Departure date", "Departure time", "Departure flight", "Persons", "Companions", "Interest", "Notes"])
+    for c in data["rows"]:
+        r = c.get("response") or {}
+        w.writerow([c["name"], c["email"], c["source"], c.get("hotel_name") or "", c.get("check_in") or "", c.get("check_out") or "", (c.get("invited_at") or "")[:10], (c.get("responded_at") or "")[:10],
+                    "yes" if r.get("arrives_by_plane") else ("no" if r else ""), r.get("airport") or "", r.get("arrival_date") or "", r.get("arrival_time") or "", r.get("arrival_flight") or "",
+                    r.get("departure_date") or "", r.get("departure_time") or "", r.get("departure_flight") or "", r.get("persons") or "", ", ".join(r.get("companions") or []), r.get("interest") or "", r.get("notes") or ""])
+    return Response(content=out.getvalue().encode("utf-8-sig"), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=transfer_survey.csv"})
 
 @api_router.get("/admin/email-logs")
 async def admin_get_email_logs(limit: int = 200, admin: dict = Depends(get_current_admin)):
