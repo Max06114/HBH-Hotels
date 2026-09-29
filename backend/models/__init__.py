@@ -49,6 +49,7 @@ class Hotel(BaseModel):
     breakfast_included: bool = True
     tax_included: bool = True
     active: bool = True
+    auto_deactivated: bool = False
     sort_order: Optional[int] = None  # For manual sorting
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

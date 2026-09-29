@@ -208,6 +208,10 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Admin-Vorlagen (`email_templates`, hotel-spezifisch > default) werden verwendet: `build_confirmation_email` (Bestätigung, 4 Callsites), `send_payment_reminder_with_link` (Zahlungserinnerung, PayPal-Button + Bankdaten + Rechnungslink werden angehängt), `build_arrival_reminder_email`. Rendering `render_custom_template` (Platzhalter, Absätze, unbekannte Platzhalter bleiben stehen)
   - NEU: Anreise-Erinnerung lief bisher NIE (scheduler/reminder_scheduler.py war toter Code) → Job `send_arrival_reminders` täglich 08:00 UTC, 7 Tage vor Check-in, einmalig (`arrival_reminder_sent`)
   - `GET /api/admin/transfers/open` + Dashboard-Kachel „Offene Überweisungen“ (Fälligkeit, überfällig rot)
+- **2026-06 (Fork)**: Ausgebucht-Automatik + Zimmer-Spalte (selbst getestet per curl/Screenshot)
+  - `sync_hotel_sold_out_state()` nach decrement/increment_inventory und Admin-Inventar-Update: alle Kategorien 0 → `active=false, auto_deactivated=true` + Admin-Mail `hotel_sold_out`; wieder frei → automatische Reaktivierung + Mail `hotel_reactivated` (nur wenn auto_deactivated). Manuelles Aktivieren (PUT /admin/hotels/{id}) setzt auto_deactivated zurück. Hotel-Model: `auto_deactivated`. HotelsManagement-Badge „Ausgebucht – automatisch deaktiviert“
+  - Buchungsliste: Spalte „Zimmer“ (EZ/DZ/TWIN/… Komfort, `getRoomTypeShort`), Suche matcht Kürzel
+  - LIVE-HINWEIS: „4* Hotel the niu Ridge“ ist aktiv, hat aber Kontingent 0 in allen Kategorien → aktuell nicht buchbar (Nutzer informiert)
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

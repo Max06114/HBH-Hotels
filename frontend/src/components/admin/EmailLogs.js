@@ -24,6 +24,8 @@ const TYPE_LABELS = {
     transfer_expired: 'Reservierung freigegeben',
     test: 'Test-E-Mail',
     admin_alert: 'Admin-Warnung (Zustellfehler)',
+    hotel_sold_out: 'Hotel ausgebucht (deaktiviert)',
+    hotel_reactivated: 'Hotel wieder buchbar',
     payment_failure_alert: 'Admin-Warnung (Zahlungsprobleme)',
     other: 'Sonstige'
   },
@@ -39,6 +41,8 @@ const TYPE_LABELS = {
     transfer_expired: 'Reservation released',
     test: 'Test email',
     admin_alert: 'Admin Alert (delivery failure)',
+    hotel_sold_out: 'Hotel sold out (deactivated)',
+    hotel_reactivated: 'Hotel available again',
     payment_failure_alert: 'Admin Alert (payment failures)',
     other: 'Other'
   }

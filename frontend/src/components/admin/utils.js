@@ -164,3 +164,10 @@ export const getPaymentEventLabel = (lastEvent, language = 'de') => {
   const issue = PAYPAL_ISSUE_LABELS[code]?.[language] || code;
   return `${base}: ${issue}`;
 };
+
+const ROOM_SHORT = {
+  single: 'EZ', double: 'DZ', twin: 'TWIN',
+  single_comfort: 'EZ Komfort', double_comfort: 'DZ Komfort', twin_comfort: 'TWIN Komfort'
+};
+
+export const getRoomTypeShort = (roomType) => ROOM_SHORT[roomType] || roomType || '-';

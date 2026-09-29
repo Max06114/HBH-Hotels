@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
 import TransferActionDialog from './TransferActionDialog';
-import { getPaymentEventLabel } from './utils';
+import { getPaymentEventLabel, getRoomTypeShort, getRoomTypeLabel } from './utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -45,7 +45,8 @@ const BookingsManagement = () => {
     if (!q) return true;
     return `${b.first_name} ${b.last_name}`.toLowerCase().includes(q)
       || b.email?.toLowerCase().includes(q)
-      || b.booking_number?.toLowerCase().includes(q);
+      || b.booking_number?.toLowerCase().includes(q)
+      || getRoomTypeShort(b.room_type).toLowerCase() === q;
   });
 
   const fetchBookings = useCallback(async () => {
@@ -221,6 +222,7 @@ const BookingsManagement = () => {
                   <TableHead>{t('bookingNumber')}</TableHead>
                   <TableHead>{language === 'de' ? 'Gast' : 'Guest'}</TableHead>
                   <TableHead>Hotel</TableHead>
+                  <TableHead>{language === 'de' ? 'Zimmer' : 'Room'}</TableHead>
                   <TableHead>{t('checkIn')}</TableHead>
                   <TableHead>{t('checkOut')}</TableHead>
                   <TableHead>{t('total')}</TableHead>
@@ -239,6 +241,16 @@ const BookingsManagement = () => {
                       </div>
                     </TableCell>
                     <TableCell>{booking.hotel_name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`border-[#E5E0D5] font-mono text-xs ${booking.room_type?.includes('comfort') ? 'bg-[#F5F2EA]' : ''}`}
+                        title={getRoomTypeLabel(booking.room_type, language)}
+                        data-testid={`room-type-${booking.id}`}
+                      >
+                        {getRoomTypeShort(booking.room_type)}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{booking.check_in}</TableCell>
                     <TableCell>{booking.check_out}</TableCell>
                     <TableCell className="font-semibold">{formatPrice(booking.total_price)} €</TableCell>

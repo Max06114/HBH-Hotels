@@ -202,8 +202,8 @@ const HotelsManagement = () => {
                     <span className="mx-2">|</span>
                     <span className="text-[#6B1D2A] font-semibold">Doppelzimmer: {hotel.double_price}€</span>
                   </div>
-                  <Badge className={hotel.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                    {hotel.active ? 'Aktiv' : 'Inaktiv'}
+                  <Badge className={hotel.active ? 'bg-green-100 text-green-800' : hotel.auto_deactivated ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'} data-testid={`hotel-active-badge-${hotel.id}`}>
+                    {hotel.active ? 'Aktiv' : hotel.auto_deactivated ? 'Ausgebucht – automatisch deaktiviert' : 'Inaktiv'}
                   </Badge>
                 </div>
               </div>

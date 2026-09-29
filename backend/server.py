@@ -407,6 +407,7 @@ async def decrement_inventory(hotel_id: str, room_type: str) -> bool:
         {"$inc": {f"inventory.{inv_key}": -1}}
     )
     logger.info(f"Decremented {inv_key} inventory for hotel {hotel_id}: {current} -> {current - 1}")
+    await sync_hotel_sold_out_state(hotel_id)
     return True
 
 async def increment_inventory(hotel_id: str, room_type: str) -> bool:
@@ -423,7 +424,49 @@ async def increment_inventory(hotel_id: str, room_type: str) -> bool:
         {"$inc": {f"inventory.{inv_key}": 1}}
     )
     logger.info(f"Incremented {inv_key} inventory for hotel {hotel_id} (cancellation)")
+    await sync_hotel_sold_out_state(hotel_id)
     return True
+
+def _inventory_rows_html(inventory: dict) -> str:
+    labels = {"single": "Einzelzimmer", "double": "Doppelzimmer", "twin": "Zweibettzimmer", "standard_pool": "Standard-Pool", "comfort_pool": "Komfort-Pool"}
+    return "".join(f"<tr><td style='padding:4px 12px 4px 0;'>{labels.get(k, k)}</td><td>{v}</td></tr>" for k, v in inventory.items() if isinstance(v, (int, float)))
+
+async def sync_hotel_sold_out_state(hotel_id: str):
+    """Auto-deactivate a hotel when every room type is sold out; reactivate when rooms free up again."""
+    hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
+    if not hotel or not hotel.get("inventory"):
+        return
+    counts = [v for v in hotel["inventory"].values() if isinstance(v, (int, float))]
+    if not counts:
+        return
+    sold_out = all(v <= 0 for v in counts)
+    now = datetime.now(timezone.utc).isoformat()
+    if sold_out and hotel.get("active", True):
+        await db.hotels.update_one({"id": hotel_id}, {"$set": {"active": False, "auto_deactivated": True, "sold_out_at": now}})
+        booked = await db.bookings.count_documents({"hotel_id": hotel_id, "payment_status": {"$in": ["deposit_paid", "fully_paid", "transfer_pending"]}})
+        logger.info(f"Hotel {hotel['name']} sold out - auto-deactivated")
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; color: #1A1A1A;">
+            <h2 style="color: #6B1D2A;">Hotel ausgebucht: {hotel['name']}</h2>
+            <p>Alle Zimmerkategorien sind belegt. Das Hotel wurde <strong>automatisch deaktiviert</strong> und ist auf der Website nicht mehr buchbar.</p>
+            <table style="border-collapse: collapse;">{_inventory_rows_html(hotel['inventory'])}</table>
+            <p>Bezahlte/reservierte Buchungen für dieses Hotel: <strong>{booked}</strong>.</p>
+            <p style="font-size: 13px; color: #4A4A4A;">Wird ein Zimmer wieder frei (Storno, abgelaufene Überweisung) oder erhöhen Sie das Kontingent im Admin, wird das Hotel automatisch wieder aktiviert.
+            Sie können es jederzeit im Admin unter „Hotels“ manuell aktivieren.</p>
+        </body></html>
+        """
+        await send_email(ADMIN_EMAIL, f"[HBH] Ausgebucht: {hotel['name']} wurde deaktiviert", body, email_type="hotel_sold_out")
+    elif not sold_out and not hotel.get("active", True) and hotel.get("auto_deactivated"):
+        await db.hotels.update_one({"id": hotel_id}, {"$set": {"active": True, "auto_deactivated": False, "reactivated_at": now}})
+        logger.info(f"Hotel {hotel['name']} has rooms again - auto-reactivated")
+        body = f"""
+        <html><body style="font-family: Arial, sans-serif; color: #1A1A1A;">
+            <h2 style="color: #2E7D32;">Wieder verfügbar: {hotel['name']}</h2>
+            <p>Es ist wieder mindestens ein Zimmer frei. Das Hotel wurde <strong>automatisch wieder aktiviert</strong>.</p>
+            <table style="border-collapse: collapse;">{_inventory_rows_html(hotel['inventory'])}</table>
+        </body></html>
+        """
+        await send_email(ADMIN_EMAIL, f"[HBH] Wieder buchbar: {hotel['name']}", body, email_type="hotel_reactivated")
 
 async def generate_invoice_number() -> str:
     count = await db.bookings.count_documents({})
@@ -1915,9 +1958,12 @@ async def admin_create_hotel(hotel_data: HotelCreate, admin: dict = Depends(get_
 
 @api_router.put("/admin/hotels/{hotel_id}")
 async def admin_update_hotel(hotel_id: str, hotel_data: HotelCreate, admin: dict = Depends(get_current_admin)):
+    updates = hotel_data.model_dump()
+    if updates.get("active"):
+        updates["auto_deactivated"] = False  # manual activation overrides sold-out automation
     result = await db.hotels.update_one(
         {"id": hotel_id},
-        {"$set": hotel_data.model_dump()}
+        {"$set": updates}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Hotel not found")
@@ -2024,13 +2070,16 @@ async def admin_update_inventory(hotel_id: str, inventory_data: InventoryUpdate,
                 {"$set": update_fields}
             )
             logger.info(f"Updated inventory for hotel {hotel_id}: {update_fields}")
+            await sync_hotel_sold_out_state(hotel_id)
         
         # Return updated hotel
         updated_hotel = await db.hotels.find_one({"id": hotel_id}, {"_id": 0})
         return {
             "message": "Inventory updated successfully",
             "hotel_id": hotel_id,
-            "inventory": updated_hotel.get("inventory") or {}
+            "inventory": updated_hotel.get("inventory") or {},
+            "active": updated_hotel.get("active", True),
+            "auto_deactivated": updated_hotel.get("auto_deactivated", False)
         }
     except HTTPException:
         raise
