@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
+import base64
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -63,6 +65,12 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', 465))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'info@travel-events.de')
+
+# Resend (HTTP email API) - preferred when configured, because Railway blocks SMTP ports
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+EMAIL_FROM = os.environ.get('EMAIL_FROM', SMTP_USER or ADMIN_EMAIL)
+EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'Travel Events')
+EMAIL_PROVIDER = "resend" if RESEND_API_KEY else "smtp"
 
 # Object Storage Config
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
@@ -586,42 +594,74 @@ async def send_email(to_email: str, subject: str, body_html: str, attachment: by
         "booking_id": booking.get("id") if booking else None,
         "booking_number": booking.get("booking_number") if booking else None,
         "has_attachment": bool(attachment),
+        "provider": EMAIL_PROVIDER,
         "sent_at": datetime.now(timezone.utc).isoformat()
     }
     try:
-        msg = MIMEMultipart()
-        msg['From'] = SMTP_USER
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        
-        msg.attach(MIMEText(body_html, 'html', 'utf-8'))
-        
-        if attachment and attachment_name:
-            part = MIMEApplication(attachment, Name=attachment_name)
-            part['Content-Disposition'] = f'attachment; filename="{attachment_name}"'
-            msg.attach(part)
-        
-        await aiosmtplib.send(
-            msg,
-            recipients=recipients,
-            hostname=SMTP_HOST,
-            port=SMTP_PORT,
-            username=SMTP_USER,
-            password=SMTP_PASSWORD,
-            use_tls=True
-        )
-        logger.info(f"Email sent to {to_email}")
+        if EMAIL_PROVIDER == "resend":
+            await _send_via_resend(to_email, recipients, subject, body_html, attachment, attachment_name)
+        else:
+            await _send_via_smtp(to_email, recipients, subject, body_html, attachment, attachment_name)
+        logger.info(f"Email sent to {to_email} via {EMAIL_PROVIDER}")
         log_entry["status"] = "sent"
         await db.email_logs.insert_one(log_entry)
         return True
     except Exception as e:
-        logger.error(f"Failed to send email: {e}")
+        logger.error(f"Failed to send email via {EMAIL_PROVIDER}: {e}")
         log_entry["status"] = "failed"
         log_entry["error"] = str(e)
         await db.email_logs.insert_one(log_entry)
         if email_type != "admin_alert":
             await notify_admin_email_failure(to_email, subject, email_type, booking, str(e))
         return False
+
+async def _send_via_resend(to_email, recipients, subject, body_html, attachment, attachment_name):
+    import httpx
+    payload = {
+        "from": f"{EMAIL_FROM_NAME} <{EMAIL_FROM}>",
+        "to": [to_email],
+        "subject": subject,
+        "html": body_html,
+        "reply_to": [ADMIN_EMAIL],
+    }
+    bcc = [r for r in recipients if r != to_email]
+    if bcc:
+        payload["bcc"] = bcc
+    if attachment and attachment_name:
+        payload["attachments"] = [{"filename": attachment_name, "content": base64.b64encode(attachment).decode()}]
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json=payload
+        )
+    if resp.status_code >= 400:
+        try:
+            err = resp.json()
+            raise RuntimeError(f"Resend {resp.status_code}: {err.get('name', '')} {err.get('message', '')}".strip())
+        except ValueError:
+            raise RuntimeError(f"Resend {resp.status_code}: {resp.text[:200]}")
+
+async def _send_via_smtp(to_email, recipients, subject, body_html, attachment, attachment_name):
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_USER
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body_html, 'html', 'utf-8'))
+    if attachment and attachment_name:
+        part = MIMEApplication(attachment, Name=attachment_name)
+        part['Content-Disposition'] = f'attachment; filename="{attachment_name}"'
+        msg.attach(part)
+    await aiosmtplib.send(
+        msg,
+        recipients=recipients,
+        hostname=SMTP_HOST,
+        port=SMTP_PORT,
+        username=SMTP_USER,
+        password=SMTP_PASSWORD,
+        use_tls=True,
+        timeout=30
+    )
 
 async def notify_admin_email_failure(to_email: str, subject: str, email_type: str, booking: dict, error: str):
     """Alert the admin when an email to a guest could not be delivered."""
@@ -1275,7 +1315,7 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                 if hotel:
                     lang = booking.get("language", "de")
                     subject, body = generate_remaining_payment_confirmation_email(booking, hotel, "paypal", lang)
-                    await send_email(booking['email'], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True)
+                    asyncio.create_task(send_email(booking['email'], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True))
                 
                 await log_payment_event(booking, "capture_completed", f"Restzahlung {booking['remaining_amount']} € erhalten", None, capture_data.order_id)
                 return {"status": "COMPLETED", "booking_id": booking["id"], "payment_type": "remaining"}
@@ -1317,7 +1357,7 @@ async def capture_paypal_order(capture_data: PayPalCaptureRequest):
                     lang = booking.get("language", "de")
                     pdf = generate_invoice_pdf(updated_booking, hotel, lang)
                     subject, body = generate_booking_confirmation_email(updated_booking, hotel, lang, get_invoice_link(booking["id"]))
-                    await send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf", email_type="booking_confirmation", booking=booking, bcc_admin=True)
+                    asyncio.create_task(send_email(booking['email'], subject, body, pdf, f"Invoice_{booking['invoice_number']}.pdf", email_type="booking_confirmation", booking=booking, bcc_admin=True))
                 
                 await log_payment_event(booking, "capture_completed", f"Anzahlung {booking['deposit_amount']} € erhalten", None, capture_data.order_id)
                 return {"status": "COMPLETED", "booking_id": booking["id"]}
@@ -1795,7 +1835,25 @@ async def admin_get_email_logs(limit: int = 200, admin: dict = Depends(get_curre
     logs = await db.email_logs.find({}, {"_id": 0}).sort("sent_at", -1).limit(min(limit, 1000)).to_list(1000)
     total = await db.email_logs.count_documents({})
     failed = await db.email_logs.count_documents({"status": "failed"})
-    return {"logs": logs, "total": total, "failed": failed}
+    return {"logs": logs, "total": total, "failed": failed,
+            "provider": EMAIL_PROVIDER, "from_email": EMAIL_FROM, "from_name": EMAIL_FROM_NAME, "admin_email": ADMIN_EMAIL}
+
+@api_router.post("/admin/email-logs/test")
+async def admin_send_test_email(admin: dict = Depends(get_current_admin)):
+    """Send a test email to the admin address to verify the email configuration."""
+    body = f"""
+    <html><body style="font-family: Arial, sans-serif; color: #1A1A1A;">
+        <h2 style="color: #6B1D2A;">Test-E-Mail erfolgreich</h2>
+        <p>Der E-Mail-Versand des Buchungssystems funktioniert.</p>
+        <p style="font-size: 13px; color: #4A4A4A;">Provider: <strong>{EMAIL_PROVIDER}</strong> · Absender: {EMAIL_FROM_NAME} &lt;{EMAIL_FROM}&gt; ·
+        Zeit: {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} UTC</p>
+    </body></html>
+    """
+    success = await send_email(ADMIN_EMAIL, "[HBH] Test-E-Mail vom Buchungssystem", body, email_type="test")
+    if not success:
+        last = await db.email_logs.find_one({"email_type": "test"}, {"_id": 0}, sort=[("sent_at", -1)])
+        raise HTTPException(status_code=502, detail=(last or {}).get("error") or "Email could not be sent")
+    return {"message": "Test email sent", "to": ADMIN_EMAIL, "provider": EMAIL_PROVIDER}
 
 @api_router.get("/admin/payments")
 async def admin_get_payments(admin: dict = Depends(get_current_admin)):

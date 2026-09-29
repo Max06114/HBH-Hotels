@@ -185,6 +185,12 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Admin-Buchungsliste zeigt unter „Ausstehend“/„Abgebrochen“ den letzten Grund (`getPaymentEventLabel`, PayPal-Issue-Codes übersetzt)
   - Admin-Warnmail `payment_failure_alert` bei ≥2 fehlgeschlagenen Versuchen eines Gastes in 24h (einmalig pro 24h)
   - Kleiner Fix: Übersetzungsschlüssel `remainingBalance` → `remaining` in BookingSummary
+- **2026-06 (Fork)**: E-Mail-Versand über Resend (Ursache gefunden: Railway blockiert SMTP-Ports auf Hobby-Plan → seit Umzug keine E-Mail zugestellt)
+  - `send_email()` nutzt Resend HTTP-API (`https://api.resend.com/emails`, Attachments base64, bcc, reply_to) wenn `RESEND_API_KEY` gesetzt ist, sonst Fallback SMTP (Timeout 30s)
+  - Neue Env-Variablen (Railway): `RESEND_API_KEY`, `EMAIL_FROM` (info@travel-events.de, Domain muss bei Resend verifiziert sein), `EMAIL_FROM_NAME` (Travel Events)
+  - Bestätigungs-E-Mails im PayPal-Capture-Flow laufen als Background-Task (Gast wartet nicht auf Versand)
+  - Admin E-Mail-Protokoll: Provider-Anzeige, Button „Test-E-Mail senden“ (`POST /api/admin/email-logs/test`), Button „Erneut senden“ bei fehlgeschlagenen Bestätigungen (nutzt resend-confirmation)
+  - Betroffene Gäste ohne Bestätigung (aus Live-Protokoll): cooneylk@gmail.com, w.ryan@dsm.ie u. a. → nach Resend-Setup über Protokoll nachsenden
 - **2026-06-01**: AdminDashboard.js Refactoring completed
   - Split into 9 separate components in `/components/admin/`
   - Main file reduced from ~1,550 to ~70 lines

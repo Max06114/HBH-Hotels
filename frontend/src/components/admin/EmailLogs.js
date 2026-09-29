@@ -6,7 +6,9 @@ import { Card, CardContent } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
-import { Loader2, MailCheck, MailX, Paperclip } from 'lucide-react';
+import { Loader2, MailCheck, MailX, Paperclip, Send, RotateCw } from 'lucide-react';
+import { Button } from '../ui/button';
+import { toast } from 'sonner';
 import { API, formatDateTime } from './utils';
 
 const TYPE_LABELS = {
@@ -17,6 +19,7 @@ const TYPE_LABELS = {
     payment_reminder: 'Zahlungserinnerung',
     arrival_reminder: 'Anreise-Erinnerung',
     cancellation: 'Stornierung',
+    test: 'Test-E-Mail',
     admin_alert: 'Admin-Warnung (Zustellfehler)',
     payment_failure_alert: 'Admin-Warnung (Zahlungsprobleme)',
     other: 'Sonstige'
@@ -28,6 +31,7 @@ const TYPE_LABELS = {
     payment_reminder: 'Payment Reminder',
     arrival_reminder: 'Arrival Reminder',
     cancellation: 'Cancellation',
+    test: 'Test email',
     admin_alert: 'Admin Alert (delivery failure)',
     payment_failure_alert: 'Admin Alert (payment failures)',
     other: 'Other'
@@ -40,7 +44,35 @@ const EmailLogs = () => {
   const [data, setData] = useState({ logs: [], total: 0, failed: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [resendingId, setResendingId] = useState(null);
   const de = language === 'de';
+
+  const handleTestEmail = async () => {
+    setTesting(true);
+    try {
+      const res = await axios.post(`${API}/admin/email-logs/test`, {}, { headers: getAuthHeaders() });
+      toast.success(de ? `Test-E-Mail an ${res.data.to} gesendet (${res.data.provider})` : `Test email sent to ${res.data.to} (${res.data.provider})`);
+    } catch (error) {
+      toast.error((de ? 'Versand fehlgeschlagen: ' : 'Sending failed: ') + (error.response?.data?.detail || error.message), { duration: 10000 });
+    } finally {
+      setTesting(false);
+      fetchLogs();
+    }
+  };
+
+  const handleResend = async (log) => {
+    setResendingId(log.id);
+    try {
+      await axios.post(`${API}/admin/bookings/${log.booking_id}/resend-confirmation`, {}, { headers: getAuthHeaders() });
+      toast.success(de ? `Bestätigung an ${log.to_email} erneut gesendet` : `Confirmation resent to ${log.to_email}`);
+    } catch (error) {
+      toast.error((de ? 'Erneut senden fehlgeschlagen: ' : 'Resend failed: ') + (error.response?.data?.detail || error.message), { duration: 10000 });
+    } finally {
+      setResendingId(null);
+      fetchLogs();
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -67,7 +99,23 @@ const EmailLogs = () => {
   return (
     <div data-testid="admin-email-logs">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
-        <h1 className="font-serif text-3xl text-[#1A1A1A]">{de ? 'E-Mail-Protokoll' : 'Email Log'}</h1>
+        <div>
+          <h1 className="font-serif text-3xl text-[#1A1A1A]">{de ? 'E-Mail-Protokoll' : 'Email Log'}</h1>
+          {data.provider && (
+            <p className="text-sm text-[#4A4A4A] mt-1" data-testid="email-provider-info">
+              {de ? 'Versand über' : 'Sending via'} <strong>{data.provider === 'resend' ? 'Resend (HTTP-API)' : 'SMTP'}</strong> · {data.from_name} &lt;{data.from_email}&gt;
+              {data.provider === 'smtp' && (
+                <span className="text-amber-700"> · {de ? 'Hinweis: Railway blockiert SMTP – RESEND_API_KEY setzen' : 'Note: Railway blocks SMTP – set RESEND_API_KEY'}</span>
+              )}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={handleTestEmail} disabled={testing} variant="outline" className="border-[#6B1D2A] text-[#6B1D2A]" data-testid="send-test-email-btn">
+            {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            {de ? 'Test-E-Mail senden' : 'Send test email'}
+          </Button>
+        </div>
         <Input
           placeholder={de ? 'Suche: E-Mail, Buchungsnummer, Betreff…' : 'Search: email, booking number, subject…'}
           value={search}
@@ -110,6 +158,7 @@ const EmailLogs = () => {
                   <TableHead>{de ? 'Typ' : 'Type'}</TableHead>
                   <TableHead>{de ? 'Betreff' : 'Subject'}</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -133,6 +182,18 @@ const EmailLogs = () => {
                         <Badge className="bg-red-100 text-red-800" title={log.error}>{de ? 'Fehler' : 'Failed'}</Badge>
                       )}
                       {log.error && <p className="text-xs text-red-600 mt-1 max-w-xs truncate" title={log.error}>{log.error}</p>}
+                    </TableCell>
+                    <TableCell>
+                      {log.status === 'failed' && log.booking_id && ['booking_confirmation', 'booking_confirmation_resend'].includes(log.email_type) && (
+                        <Button
+                          variant="ghost" size="sm" className="text-[#6B1D2A]"
+                          onClick={() => handleResend(log)} disabled={resendingId === log.id}
+                          title={de ? 'Bestätigung erneut senden' : 'Resend confirmation'}
+                          data-testid={`email-log-resend-${log.id}`}
+                        >
+                          {resendingId === log.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
