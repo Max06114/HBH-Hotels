@@ -88,7 +88,7 @@ const TransferPage = () => {
             )}
             {status === 'ready' && settings && (
               <>
-                <p className="text-[#4A4A4A] text-center mb-2">{settings.intro.replace(/[–-]?\s*this is not a booking yet\.?$/i, '')} <strong className="text-[#1A1A1A]">This is not a booking yet.</strong></p>
+                <p className="text-[#4A4A4A] text-center mb-2">{settings.intro.replace(/\s*[–-]?\s*this is not a booking yet\.?$/i, '').replace(/([^.!?])$/, '$1.')} <strong className="text-[#1A1A1A]">This is not a booking yet.</strong></p>
                 <p className="text-center text-sm font-medium text-[#6B1D2A] mb-8" data-testid="transfer-deadline">Please reply by {deadline}. Price if the bus runs: €{settings.price} per person per way. A transfer only runs with a minimum of {settings.min_persons} persons.</p>
                 {contact?.hotel_name && (
                   <p className="text-sm bg-[#F5F2EA] rounded-lg p-3 mb-6" data-testid="transfer-hotel-info">Your hotel booking: <strong>{contact.hotel_name}</strong>, {contact.check_in} – {contact.check_out}</p>
