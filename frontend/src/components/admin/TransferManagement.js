@@ -84,6 +84,7 @@ const TransferManagement = () => {
           <h2 className="font-semibold">Einstellungen</h2>
           <div><Label>Stichtag (Rückmeldung bis)</Label><Input type="date" value={settings.deadline || ''} onChange={(e) => setSettings({ ...settings, deadline: e.target.value })} data-testid="transfer-deadline-input" /></div>
           <div><Label>Preis pro Person und Strecke (€)</Label><Input type="number" value={settings.price ?? ''} onChange={(e) => setSettings({ ...settings, price: parseFloat(e.target.value) })} data-testid="transfer-price-input" /></div>
+          <div><Label>Mindestpersonen pro Transfer</Label><Input type="number" value={settings.min_persons ?? 6} onChange={(e) => setSettings({ ...settings, min_persons: parseInt(e.target.value, 10) })} data-testid="transfer-min-persons-input" /></div>
           <div><Label>Status</Label>
             <select className="w-full border border-[#E5E0D5] rounded-md h-10 px-3 bg-white" value={settings.status} onChange={(e) => setSettings({ ...settings, status: e.target.value })} data-testid="transfer-status-select">
               <option value="survey">Umfrage läuft (Link in Bestätigungs-E-Mails aktiv)</option><option value="offer">Angebot verschickt</option><option value="closed">Geschlossen</option>

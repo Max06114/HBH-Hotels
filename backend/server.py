@@ -2264,8 +2264,8 @@ async def resend_webhook(request: Request):
 
 # ============== AIRPORT TRANSFER SURVEY (Stage 1) ==============
 
-TRANSFER_DEFAULTS = {"key": "transfer", "deadline": "2027-01-15", "price": 55.0, "status": "survey",
-                     "intro": "Many guests fly into Berlin (BER). If enough guests are interested, we will organise a bus transfer Berlin BER ↔ Halle for €55 per person per way. Please tell us your travel plans – this is not a booking yet."}
+TRANSFER_DEFAULTS = {"key": "transfer", "deadline": "2027-01-15", "price": 58.0, "min_persons": 6, "status": "survey",
+                     "intro": "Many guests fly into Berlin (BER). If enough guests are interested, we will organise a bus transfer Berlin BER ↔ Halle for €58 per person per way. A transfer only runs if at least 6 persons come together. Please tell us your travel plans – this is not a booking yet."}
 
 async def get_transfer_settings() -> dict:
     doc = await db.settings.find_one({"key": "transfer"}, {"_id": 0})
@@ -2303,7 +2303,7 @@ def transfer_survey_email(contact: dict, settings: dict, reminder: bool = False)
                 <p>Please fill in the short form with your flight details (arrival and departure) and let us know whether you would be interested
                 in the bus transfer. <strong>Please reply by {deadline}.</strong></p>
                 <p style="text-align:center; margin: 30px 0;"><a href="{transfer_link(contact['token'])}" class="btn btn-primary">Open transfer form</a></p>
-                <p style="font-size: 13px; color: #666;">After the deadline we will review all replies. If there are enough participants, you will receive an email with the
+                <p style="font-size: 13px; color: #666;">After the deadline we will review all replies. If there are enough participants (minimum {settings.get('min_persons', 6)} persons per transfer), you will receive an email with the
                 fixed bus times and a booking link (payment €{settings['price']:.0f} per person per way). Otherwise we will recommend travelling by train (bahn.de).</p>
     """
     return subject, get_email_header("Airport Transfer Survey", "en") + body + get_email_footer("en")
@@ -2312,8 +2312,8 @@ def transfer_confirmation_block(token: str, settings: dict) -> str:
     deadline = datetime.fromisoformat(settings["deadline"]).strftime("%d.%m.%Y")
     return f"""
                 <h3 style="margin-top: 30px;">Airport transfer Berlin ↔ Halle</h3>
-                <p style="font-size: 14px;">Flying into Berlin? We are collecting travel plans for a possible bus transfer (€{settings['price']:.0f} per person per way).
-                Please tell us your flight details by {deadline} – this is not a booking yet.</p>
+                <p style="font-size: 14px;">Flying into Berlin? We are collecting travel plans for a possible bus transfer (€{settings['price']:.0f} per person per way, minimum {settings.get('min_persons', 6)} persons per transfer).
+                Please tell us your flight details by {deadline} – <strong>this is not a booking yet.</strong></p>
                 <p style="text-align:center;"><a href="{transfer_link(token)}" class="btn btn-secondary">Transfer form</a></p>
     """
 
@@ -2337,7 +2337,7 @@ class TransferResponseIn(BaseModel):
 @api_router.get("/transfer/settings")
 async def public_transfer_settings():
     s = await get_transfer_settings()
-    return {"deadline": s["deadline"], "price": s["price"], "status": s["status"], "intro": s["intro"]}
+    return {"deadline": s["deadline"], "price": s["price"], "min_persons": s.get("min_persons", 6), "status": s["status"], "intro": s["intro"]}
 
 @api_router.get("/transfer/form/{token}")
 async def public_transfer_form(token: str):
@@ -2372,6 +2372,7 @@ async def public_transfer_respond(data: TransferResponseIn):
 class TransferSettingsIn(BaseModel):
     deadline: Optional[str] = None
     price: Optional[float] = None
+    min_persons: Optional[int] = None
     status: Optional[str] = None
     intro: Optional[str] = None
 

@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Bus, Loader2, CheckCircle2, Plane } from 'lucide-react';
+import { Bus, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -55,7 +55,7 @@ const TransferPage = () => {
 
   const submit = async () => {
     if (!form.name.trim() || !form.email.trim()) return toast.error('Please enter your name and email.');
-    if (form.arrives_by_plane && !form.arrival_date) return toast.error('Please enter your arrival date.');
+    if (!form.arrival_date) return toast.error('Please enter your arrival date.');
     setSubmitting(true);
     try {
       await axios.post(`${API}/transfer/respond`, { ...form, token: token || null, persons: Number(form.persons) });
@@ -83,35 +83,20 @@ const TransferPage = () => {
               <div className="text-center" data-testid="transfer-done">
                 <CheckCircle2 className="w-12 h-12 text-green-600 mx-auto mb-3" />
                 <p className="text-[#1A1A1A] font-medium">Thank you – your travel plans have been saved.</p>
-                <p className="text-sm text-[#4A4A4A] mt-2">After {deadline} we will let you know by email whether the bus transfer will run and how to book it. Your reply is not a booking yet.</p>
+                <p className="text-sm text-[#4A4A4A] mt-2">After {deadline} we will let you know by email whether the bus transfer will run and how to book it. <strong className="text-[#1A1A1A]">Your reply is not a booking yet.</strong></p>
               </div>
             )}
             {status === 'ready' && settings && (
               <>
-                <p className="text-[#4A4A4A] text-center mb-2">{settings.intro}</p>
-                <p className="text-center text-sm font-medium text-[#6B1D2A] mb-8" data-testid="transfer-deadline">Please reply by {deadline}. Price if the bus runs: €{settings.price} per person per way.</p>
+                <p className="text-[#4A4A4A] text-center mb-2">{settings.intro.replace(/[–-]?\s*this is not a booking yet\.?$/i, '')} <strong className="text-[#1A1A1A]">This is not a booking yet.</strong></p>
+                <p className="text-center text-sm font-medium text-[#6B1D2A] mb-8" data-testid="transfer-deadline">Please reply by {deadline}. Price if the bus runs: €{settings.price} per person per way. A transfer only runs with a minimum of {settings.min_persons} persons.</p>
                 {contact?.hotel_name && (
                   <p className="text-sm bg-[#F5F2EA] rounded-lg p-3 mb-6" data-testid="transfer-hotel-info">Your hotel booking: <strong>{contact.hotel_name}</strong>, {contact.check_in} – {contact.check_out}</p>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field id="name" label="Your name *" value={form.name} onChange={set('name')} />
                   <Field id="email" label="Email *" type="email" value={form.email} onChange={set('email')} />
-                  <div className="md:col-span-2">
-                    <Label>Are you travelling by plane?</Label>
-                    <div className="flex gap-2 mt-1">
-                      {[[true, 'Yes, I fly to Berlin'], [false, 'No (train / car)']].map(([v, l]) => (
-                        <button key={String(v)} type="button" onClick={() => set('arrives_by_plane')(v)} data-testid={`transfer-plane-${v}`}
-                          className={`rounded-full border px-4 py-2 text-sm ${form.arrives_by_plane === v ? 'bg-[#6B1D2A] text-white border-[#6B1D2A]' : 'bg-white border-[#E5E0D5]'}`}>
-                          {v && <Plane className="w-4 h-4 inline mr-1" />}{l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {form.arrives_by_plane && (
-                    <>
-                      <Field id="airport" label="Airport" value={form.airport} onChange={set('airport')} placeholder="BER" />
-                      <div />
-                      <Field id="arrival_date" label="Arrival date *" type="date" value={form.arrival_date} onChange={set('arrival_date')} />
+                      <Field id="arrival_date" label="Arrival date at BER *" type="date" value={form.arrival_date} onChange={set('arrival_date')} />
                       <Field id="arrival_time" label="Arrival time (landing)" type="time" value={form.arrival_time} onChange={set('arrival_time')} />
                       <Field id="arrival_flight" label="Arrival flight number" value={form.arrival_flight} onChange={set('arrival_flight')} placeholder="e.g. EI 334" />
                       <div />
@@ -133,8 +118,6 @@ const TransferPage = () => {
                           ))}
                         </div>
                       </div>
-                    </>
-                  )}
                   <div className="md:col-span-2">
                     <Label htmlFor="notes">Notes</Label>
                     <Textarea id="notes" value={form.notes || ''} onChange={(e) => set('notes')(e.target.value)} data-testid="transfer-notes" />
@@ -143,7 +126,7 @@ const TransferPage = () => {
                 <Button onClick={submit} disabled={submitting} className="w-full mt-8 bg-[#6B1D2A] hover:bg-[#8A2536] text-white rounded-full py-6 text-base" data-testid="transfer-submit">
                   {submitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Bus className="w-5 h-5 mr-2" />}Send my travel plans
                 </Button>
-                <p className="text-xs text-[#4A4A4A] text-center mt-3">This is not a booking. No payment is required now.</p>
+                <p className="text-sm text-[#1A1A1A] text-center mt-3"><strong>This is not a booking yet.</strong> No payment is required now.</p>
               </>
             )}
           </CardContent>
