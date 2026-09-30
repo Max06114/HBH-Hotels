@@ -2459,6 +2459,14 @@ async def admin_transfer_send_survey(data: TransferSendIn, admin: dict = Depends
             failed += 1
     return {"sent": sent, "failed": failed, "total": len(contacts)}
 
+@api_router.delete("/admin/transfer/contacts/{contact_id}")
+async def admin_transfer_delete_contact(contact_id: str, admin: dict = Depends(get_current_admin)):
+    res = await db.transfer_contacts.delete_one({"id": contact_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    await db.transfer_responses.delete_many({"contact_id": contact_id})
+    return {"deleted": True}
+
 @api_router.get("/admin/transfer/export")
 async def admin_transfer_export(admin: dict = Depends(get_current_admin)):
     import csv
