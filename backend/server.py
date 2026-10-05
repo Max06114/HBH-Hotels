@@ -2143,13 +2143,26 @@ async def admin_update_booking_status(booking_id: str, status: str, admin: dict 
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
-    result = await db.bookings.update_one(
-        {"id": booking_id},
-        {"$set": {"payment_status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    if result.matched_count == 0:
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    return {"message": "Status updated successfully"}
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {"payment_status": status, "updated_at": now}
+    became_fully_paid = status == "fully_paid" and booking.get("payment_status") != "fully_paid"
+    if became_fully_paid:
+        updates["fully_paid_at"] = now
+    await db.bookings.update_one({"id": booking_id}, {"$set": updates})
+    email_sent = False
+    if became_fully_paid:
+        hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+        if hotel:
+            booking.update(updates)
+            method = "paypal" if booking.get("payment_method") == "paypal" else "bank_transfer"
+            await log_payment_event(booking, "capture_completed", f"Restzahlung {booking.get('remaining_amount', 0)} € manuell als erhalten markiert")
+            subject, body = generate_remaining_payment_confirmation_email(booking, hotel, method, booking.get("language", "de"))
+            asyncio.create_task(send_email(booking["email"], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True))
+            email_sent = True
+    return {"message": "Status updated successfully", "email_sent": email_sent}
 
 @api_router.post("/admin/bookings/mark-abandoned")
 async def admin_mark_abandoned(admin: dict = Depends(get_current_admin)):

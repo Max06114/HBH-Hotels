@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck } from 'lucide-react';
+import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
 import TransferActionDialog from './TransferActionDialog';
 import { getPaymentEventLabel, getRoomTypeShort, getRoomTypeLabel } from './utils';
@@ -21,6 +21,18 @@ const formatPrice = (price) => {
   if (price === null || price === undefined) return '0,00';
   return price.toFixed(2).replace('.', ',');
 };
+
+const STATUS_OPTIONS = [
+  ['deposit_paid', 'Anzahlung bezahlt', 'Deposit paid'],
+  ['fully_paid', 'Vollständig bezahlt', 'Fully paid'],
+  ['transfer_pending', 'Überweisung offen', 'Transfer pending'],
+  ['pending', 'Ausstehend', 'Pending'],
+  ['expired', 'Abgelaufen', 'Expired'],
+  ['abandoned', 'Abgebrochen', 'Abandoned'],
+  ['cancelled', 'Storniert', 'Cancelled'],
+  ['refunded', 'Erstattet', 'Refunded'],
+];
+const DEFAULT_STATUSES = ['deposit_paid', 'fully_paid', 'transfer_pending', 'pending'];
 
 const BookingsManagement = () => {
   const { t, language } = useLanguage();
@@ -34,13 +46,14 @@ const BookingsManagement = () => {
   const [editingBooking, setEditingBooking] = useState(null);
   const [transferAction, setTransferAction] = useState(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_STATUSES);
+  const toggleStatus = (s) => setStatusFilter((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
   const [hotelFilter, setHotelFilter] = useState('all');
   const hotelNames = [...new Set(bookings.map((b) => b.hotel_name).filter(Boolean))].sort();
 
   const q = search.trim().toLowerCase();
   const filteredBookings = bookings.filter((b) => {
-    if (statusFilter !== 'all' && b.payment_status !== statusFilter) return false;
+    if (!statusFilter.includes(b.payment_status)) return false;
     if (hotelFilter !== 'all' && b.hotel_name !== hotelFilter) return false;
     if (!q) return true;
     return `${b.first_name} ${b.last_name}`.toLowerCase().includes(q)
@@ -192,25 +205,23 @@ const BookingsManagement = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="md:w-56 border-[#E5E0D5] bg-white" data-testid="bookings-status-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{language === 'de' ? 'Alle Status' : 'All statuses'}</SelectItem>
-            <SelectItem value="deposit_paid">{t('depositPaid')}</SelectItem>
-            <SelectItem value="fully_paid">{t('fullyPaid')}</SelectItem>
-            <SelectItem value="transfer_pending">{language === 'de' ? 'Überweisung offen' : 'Transfer pending'}</SelectItem>
-            <SelectItem value="pending">{t('pending')}</SelectItem>
-            <SelectItem value="expired">{language === 'de' ? 'Abgelaufen' : 'Expired'}</SelectItem>
-            <SelectItem value="abandoned">{language === 'de' ? 'Abgebrochen' : 'Abandoned'}</SelectItem>
-            <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-            <SelectItem value="refunded">{t('refunded')}</SelectItem>
-          </SelectContent>
-        </Select>
         <span className="self-center text-sm text-[#4A4A4A] whitespace-nowrap" data-testid="bookings-result-count">
           {filteredBookings.length} / {bookings.length}
         </span>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-6" data-testid="bookings-status-filter">
+        {STATUS_OPTIONS.map(([key, de, en]) => {
+          const on = statusFilter.includes(key);
+          const count = bookings.filter((b) => b.payment_status === key).length;
+          return (
+            <button key={key} type="button" onClick={() => toggleStatus(key)} aria-pressed={on} data-testid={`status-toggle-${key}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? 'bg-[#6B1D2A] text-white border-[#6B1D2A]' : 'bg-white text-[#4A4A4A] border-[#E5E0D5] hover:border-[#6B1D2A]'}`}>
+              {on ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+              {language === 'de' ? de : en}
+              <span className={`text-xs ${on ? 'text-white/80' : 'text-[#9A9A9A]'}`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
       
       <Card className="border-[#E5E0D5]">
