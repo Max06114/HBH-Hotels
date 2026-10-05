@@ -3,6 +3,18 @@ Email Templates Service for HBH Hotel Booking
 Provides consistent, bilingual email templates for all communications.
 """
 
+SALUTATION_LABELS = {
+    "de": {"Herr": "Herr", "Frau": "Frau", "Mrs": "Frau", "Mr": "Herr", "Ms": "Frau"},
+    "en": {"Herr": "Mr", "Frau": "Ms", "Mrs": "Mrs", "Mr": "Mr", "Ms": "Ms"},
+}
+
+def greeting_name(booking: dict, lang: str = "de") -> str:
+    """'Herr Müller' / 'Mrs Walsh'; for 'Divers' or unknown titles the full name without title."""
+    label = SALUTATION_LABELS.get(lang, SALUTATION_LABELS["de"]).get(booking.get("salutation") or "")
+    if label:
+        return f"{label} {booking.get('last_name', '')}".strip()
+    return f"{booking.get('first_name', '')} {booking.get('last_name', '')}".strip()
+
 def get_email_header(title: str, lang: str = "de") -> str:
     """Generate consistent email header."""
     return f"""
@@ -91,7 +103,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
         title = "Buchungsbestätigung"
         subject = f"Buchungsbestätigung - {booking['booking_number']}"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 
                 <p>vielen Dank für Ihre Buchung zum Festival <strong>Happy Birthday Händel 2027</strong>!</p>
                 
@@ -122,7 +134,7 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
         title = "Booking Confirmation"
         subject = f"Booking Confirmation - {booking['booking_number']}"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 
                 <p>Thank you for your booking for the <strong>Happy Birthday Händel 2027</strong> festival!</p>
                 
@@ -165,7 +177,7 @@ def generate_remaining_payment_confirmation_email(booking: dict, hotel: dict, pa
         title = "Restzahlung erfolgreich!"
         subject = f"Zahlungsbestätigung Restzahlung - {booking['booking_number']}"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 
                 <p>Ihre Restzahlung wurde erfolgreich verarbeitet.</p>
                 
@@ -193,7 +205,7 @@ def generate_remaining_payment_confirmation_email(booking: dict, hotel: dict, pa
         title = "Remaining Balance Paid!"
         subject = f"Payment Confirmation - Remaining Balance - {booking['booking_number']}"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 
                 <p>Your remaining payment has been successfully processed.</p>
                 
@@ -230,7 +242,7 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
         title = "Zahlungserinnerung"
         subject = "Zahlungserinnerung - Restzahlung für Ihre Hotelbuchung"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 
                 <p>in einer Woche ist die Restzahlung für Ihre Hotelbuchung im <strong>{hotel['name']}</strong> fällig.</p>
                 
@@ -264,7 +276,7 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
         title = "Payment Reminder"
         subject = "Payment Reminder - Remaining Balance for Your Hotel Booking"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 
                 <p>The remaining payment for your hotel booking at <strong>{hotel['name']}</strong> is due in one week.</p>
                 
@@ -328,7 +340,7 @@ def generate_bank_transfer_email(booking: dict, hotel: dict, bank: dict, due_dat
         title = "Reservierung – Zahlung per Überweisung"
         subject = f"Ihre Reservierung {booking['booking_number']} – bitte Anzahlung überweisen"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 <p>vielen Dank für Ihre Reservierung im <strong>{hotel['name']}</strong>. Ihr Zimmer ist für Sie vorgemerkt.
                 Die Buchung wird verbindlich, sobald Ihre Anzahlung bei uns eingegangen ist.</p>
                 <table class="info-table">
@@ -352,7 +364,7 @@ def generate_bank_transfer_email(booking: dict, hotel: dict, bank: dict, due_dat
         title = "Reservation – Payment by Bank Transfer"
         subject = f"Your reservation {booking['booking_number']} – please transfer the deposit"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 <p>Thank you for your reservation at <strong>{hotel['name']}</strong>. Your room is being held for you.
                 The booking becomes binding as soon as we receive your deposit.</p>
                 <table class="info-table">
@@ -381,7 +393,7 @@ def generate_transfer_reminder_email(booking: dict, hotel: dict, bank: dict, due
         title = "Erinnerung: Anzahlung noch offen"
         subject = f"Erinnerung – Anzahlung für Reservierung {booking['booking_number']}"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 <p>für Ihre Reservierung im <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']}) ist die Anzahlung
                 von <strong>{format_price_de(booking['deposit_amount'])} €</strong> noch nicht bei uns eingegangen.</p>
                 <p>Bitte überweisen Sie den Betrag bis spätestens <strong>{due_date}</strong>, sonst wird das Zimmer wieder freigegeben.
@@ -392,7 +404,7 @@ def generate_transfer_reminder_email(booking: dict, hotel: dict, bank: dict, due
         title = "Reminder: deposit still outstanding"
         subject = f"Reminder – deposit for reservation {booking['booking_number']}"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 <p>We have not yet received the deposit of <strong>€{booking['deposit_amount']:.2f}</strong> for your reservation at
                 <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']}).</p>
                 <p>Please transfer the amount by <strong>{due_date}</strong> at the latest, otherwise the room will be released.
@@ -407,7 +419,7 @@ def generate_transfer_expired_email(booking: dict, hotel: dict, lang: str = "de"
         title = "Reservierung freigegeben"
         subject = f"Reservierung {booking['booking_number']} wurde freigegeben"
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 <p>da die Anzahlung für Ihre Reservierung im <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']})
                 nicht innerhalb der Frist eingegangen ist, wurde das Zimmer wieder freigegeben.</p>
                 <p>Sie möchten dennoch buchen? Gern – buchen Sie einfach erneut über unsere Website oder antworten Sie auf diese E-Mail,
@@ -417,7 +429,7 @@ def generate_transfer_expired_email(booking: dict, hotel: dict, lang: str = "de"
         title = "Reservation released"
         subject = f"Reservation {booking['booking_number']} has been released"
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 <p>As the deposit for your reservation at <strong>{hotel['name']}</strong> ({booking['check_in']} – {booking['check_out']})
                 did not arrive within the payment period, the room has been released.</p>
                 <p>Still want to book? Simply book again on our website or reply to this email – we are happy to help.</p>
@@ -449,7 +461,7 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
             """
         
         body = f"""
-                <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
                 
                 <p>Ihre Buchung wurde storniert.</p>
                 
@@ -483,7 +495,7 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
             """
         
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 
                 <p>Your booking has been cancelled.</p>
                 
@@ -511,7 +523,7 @@ def generate_arrival_reminder_email(booking: dict, hotel: dict, lang: str = "de"
         title = "Erinnerung: Ihre Anreise steht bevor!"
         
         body = f"""
-                <p>Sehr geehrte/r {booking['salutation']} {booking['last_name']},</p>
+                <p>Sehr geehrte/r {greeting_name(booking, 'de')},</p>
                 
                 <p>in einer Woche ist es soweit! Wir freuen uns, Sie beim <strong>Happy Birthday Händel Festival 2027</strong> begrüßen zu dürfen.</p>
                 
@@ -554,7 +566,7 @@ def generate_arrival_reminder_email(booking: dict, hotel: dict, lang: str = "de"
         title = "Reminder: Your Arrival is Coming Up!"
         
         body = f"""
-                <p>Dear {booking['salutation']} {booking['last_name']},</p>
+                <p>Dear {greeting_name(booking, 'en')},</p>
                 
                 <p>In one week, it's time! We look forward to welcoming you at the <strong>Happy Birthday Händel Festival 2027</strong>.</p>
                 

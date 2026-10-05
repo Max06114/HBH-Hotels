@@ -20,6 +20,7 @@ const GuestInfoForm = ({ formData, onChange, onSelectChange }) => {
             <SelectContent>
               <SelectItem value="Herr">{t('mr')}</SelectItem>
               <SelectItem value="Frau">{t('mrs')}</SelectItem>
+              <SelectItem value="Mrs">{t('mrsMarried')}</SelectItem>
               <SelectItem value="Divers">{t('diverse')}</SelectItem>
             </SelectContent>
           </Select>

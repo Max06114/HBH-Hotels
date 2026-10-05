@@ -44,6 +44,8 @@ from models import (
 
 # Import email templates
 from services import (
+    SALUTATION_LABELS,
+    greeting_name,
     generate_booking_confirmation_email,
     generate_remaining_payment_confirmation_email,
     generate_payment_reminder_email,
@@ -587,7 +589,7 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
 <b>{t['date']}:</b> {invoice_date}"""
     
     right_info = f"""<b>{t['bill_to']}:</b><br/>
-{booking['salutation']} {booking['first_name']} {booking['last_name']}<br/>
+{SALUTATION_LABELS.get(language, SALUTATION_LABELS["de"]).get(booking.get('salutation') or '', '')} {booking['first_name']} {booking['last_name']}<br/>
 {booking['street']}<br/>
 {booking['postal_code']} {booking['city']}<br/>
 {booking['country']}<br/>
@@ -829,8 +831,9 @@ async def get_custom_template(hotel_id: str, template_type: str, lang: str) -> O
 
 def render_custom_template(text: str, booking: dict, hotel: dict, lang: str, title: str, extra_html: str = "") -> str:
     fmt = (lambda v: f"{v:.2f}".replace(".", ",")) if lang == "de" else (lambda v: f"{v:.2f}")
+    sal_label = SALUTATION_LABELS.get(lang, SALUTATION_LABELS["de"]).get(booking.get("salutation") or "", "")
     values = _SafeDict(
-        salutation=booking.get("salutation", ""), first_name=booking.get("first_name", ""), last_name=booking.get("last_name", ""),
+        salutation=sal_label or booking.get("first_name", ""), first_name=booking.get("first_name", ""), last_name=booking.get("last_name", ""),
         hotel_name=hotel.get("name", booking.get("hotel_name", "")), hotel_address=hotel.get("address", ""),
         booking_number=booking.get("booking_number", ""),
         room_type=ROOM_TYPE_LABELS.get(lang, ROOM_TYPE_LABELS["de"]).get(booking.get("room_type"), booking.get("room_type", "")),
@@ -2163,6 +2166,7 @@ class BookingGuestUpdate(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = None
     notes: Optional[str] = None
+    language: Optional[str] = None
 
 @api_router.patch("/admin/bookings/{booking_id}")
 async def admin_update_booking_guest(booking_id: str, data: BookingGuestUpdate, admin: dict = Depends(get_current_admin)):
@@ -2176,6 +2180,8 @@ async def admin_update_booking_guest(booking_id: str, data: BookingGuestUpdate, 
     for key in ("first_name", "last_name", "email"):
         if key in updates and not updates[key]:
             raise HTTPException(status_code=400, detail=f"{key} must not be empty")
+    if "language" in updates and updates["language"] not in ("de", "en"):
+        raise HTTPException(status_code=400, detail="language must be 'de' or 'en'")
     changes = {k: {"from": booking.get(k), "to": v} for k, v in updates.items() if booking.get(k) != v}
     if not changes:
         return {"message": "No changes", "booking": booking}
@@ -2843,8 +2849,8 @@ async def send_payment_reminder(booking: dict):
         <html><body style="font-family: Arial, sans-serif; line-height: 1.6;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #6B1D2A;">Zahlungserinnerung</h2>
-            <p>Sehr geehrte(r) {booking['salutation']} {booking['last_name']},</p>
-            <p>Ihre Anreise für Happy Birthday Händel 2026 steht in <strong>6 Wochen</strong> bevor.</p>
+            <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
+            <p>Ihre Anreise für Happy Birthday Händel 2027 steht in <strong>6 Wochen</strong> bevor.</p>
             <p>Bitte überweisen Sie den Restbetrag für Ihre Buchung:</p>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr style="background: #F5F2EA;">
@@ -2879,8 +2885,8 @@ async def send_payment_reminder(booking: dict):
         <html><body style="font-family: Arial, sans-serif; line-height: 1.6;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #6B1D2A;">Payment Reminder</h2>
-            <p>Dear {booking['salutation']} {booking['last_name']},</p>
-            <p>Your arrival for Happy Birthday Händel 2026 is in <strong>6 weeks</strong>.</p>
+            <p>Dear {greeting_name(booking, 'en')},</p>
+            <p>Your arrival for Happy Birthday Händel 2027 is in <strong>6 weeks</strong>.</p>
             <p>Please transfer the remaining balance for your booking:</p>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                 <tr style="background: #F5F2EA;">
