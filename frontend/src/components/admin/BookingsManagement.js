@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square } from 'lucide-react';
+import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square, CalendarDays } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
+import StayChangeDialog from './StayChangeDialog';
 import TransferActionDialog from './TransferActionDialog';
 import { getPaymentEventLabel, getRoomTypeShort, getRoomTypeLabel } from './utils';
 
@@ -44,6 +45,7 @@ const BookingsManagement = () => {
   const [exporting, setExporting] = useState(false);
   const [resendingId, setResendingId] = useState(null);
   const [editingBooking, setEditingBooking] = useState(null);
+  const [stayBooking, setStayBooking] = useState(null);
   const [transferAction, setTransferAction] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(DEFAULT_STATUSES);
@@ -336,6 +338,17 @@ const BookingsManagement = () => {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setStayBooking(booking)}
+                            title={language === 'de' ? 'Aufenthalt ändern (An-/Abreise)' : 'Change stay (dates)'}
+                            data-testid={`change-stay-${booking.id}`}
+                          >
+                            <CalendarDays className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleResendConfirmation(booking)}
                             disabled={resendingId === booking.id}
                             title={language === 'de' ? 'Bestätigung erneut senden' : 'Resend confirmation'}
@@ -410,6 +423,16 @@ const BookingsManagement = () => {
         onSaved={(updated) => {
           setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
           setEditingBooking(null);
+        }}
+      />
+      <StayChangeDialog
+        booking={stayBooking}
+        language={language}
+        getAuthHeaders={getAuthHeaders}
+        onClose={() => setStayBooking(null)}
+        onSaved={(updated) => {
+          setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          setStayBooking(null);
         }}
       />
     </div>

@@ -56,7 +56,8 @@ from services import (
     bank_details_html,
     generate_arrival_reminder_email,
     get_email_header,
-    get_email_footer
+    get_email_footer,
+    generate_stay_change_email
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -583,10 +584,15 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     
     # === INVOICE INFO AND CUSTOMER ===
     invoice_date = datetime.now().strftime('%d.%m.%Y')
+    corrected = booking.get('invoice_corrected_at')
+    corrected_note = ""
+    if corrected:
+        corrected_date = datetime.fromisoformat(corrected).strftime('%d.%m.%Y')
+        corrected_note = f"<br/><b>{'Korrigierte Fassung vom' if language == 'de' else 'Corrected version dated'}:</b> {corrected_date}"
     
     left_info = f"""<b>{t['invoice_nr']}:</b> {booking.get('invoice_number', 'N/A')}<br/>
 <b>{t['booking_nr']}:</b> {booking['booking_number']}<br/>
-<b>{t['date']}:</b> {invoice_date}"""
+<b>{t['date']}:</b> {invoice_date}{corrected_note}"""
     
     right_info = f"""<b>{t['bill_to']}:</b><br/>
 {SALUTATION_LABELS.get(language, SALUTATION_LABELS["de"]).get(booking.get('salutation') or '', '')} {booking['first_name']} {booking['last_name']}<br/>
@@ -637,10 +643,13 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     elements.append(Spacer(1, 15))
     
     # === TOTALS BOX ===
+    standard_split = abs(booking['deposit_amount'] - round(booking['total_price'] * 0.25, 2)) < 0.01
+    deposit_label = t['deposit'] if standard_split else ('Bereits bezahlt' if language == 'de' else 'Already paid')
+    remaining_label = f"{t['remaining']} - {t['remaining_due']}" if standard_split else f"{'Restbetrag' if language == 'de' else 'Remaining'} - {t['remaining_due']}"
     totals_data = [
         [t['subtotal'], f"{booking['total_price']:.2f} €"],
-        [t['deposit'], f"{booking['deposit_amount']:.2f} €"],
-        [f"{t['remaining']} - {t['remaining_due']}", f"{booking['remaining_amount']:.2f} €"],
+        [deposit_label, f"{booking['deposit_amount']:.2f} €"],
+        [remaining_label, f"{booking['remaining_amount']:.2f} €"],
         [t['total'], f"{booking['total_price']:.2f} €"],
     ]
     
@@ -2205,6 +2214,95 @@ async def admin_update_booking_guest(booking_id: str, data: BookingGuestUpdate, 
     )
     updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     return {"message": "Booking updated", "booking": updated, "changes": changes}
+
+def _stay_change_calc(booking: dict, hotel: dict, check_in: str, check_out: str) -> dict:
+    """New totals for changed dates; already paid money stays, remaining = new total - paid."""
+    try:
+        nights = calculate_nights(check_in, check_out)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format (YYYY-MM-DD)")
+    if nights <= 0:
+        raise HTTPException(status_code=400, detail="Check-out must be after check-in")
+    price_per_night = get_room_price(hotel, booking["room_type"])
+    total_price = round(price_per_night * nights, 2)
+    status = booking["payment_status"]
+    if status == "fully_paid":
+        paid = round(booking["total_price"], 2)
+    elif status == "deposit_paid":
+        paid = round(booking["deposit_amount"], 2)
+    else:
+        paid = 0.0
+    if paid > 0:
+        deposit_amount = paid
+        remaining_amount = round(total_price - paid, 2)
+        new_status = "fully_paid" if remaining_amount <= 0 else "deposit_paid"
+    else:
+        deposit_amount = round(total_price * 0.25, 2)
+        remaining_amount = round(total_price - deposit_amount, 2)
+        new_status = status
+    return {
+        "check_in": check_in, "check_out": check_out, "nights": nights, "price_per_night": price_per_night,
+        "total_price": total_price, "paid": paid, "deposit_amount": deposit_amount,
+        "remaining_amount": max(remaining_amount, 0.0), "refund_due": round(-remaining_amount, 2) if remaining_amount < 0 else 0.0,
+        "payment_status": new_status,
+    }
+
+STAY_CHANGEABLE = ("deposit_paid", "fully_paid")
+
+class StayChangeIn(BaseModel):
+    check_in: str
+    check_out: str
+    send_email: bool = True
+
+@api_router.get("/admin/bookings/{booking_id}/stay-preview")
+async def admin_stay_preview(booking_id: str, check_in: str, check_out: str, admin: dict = Depends(get_current_admin)):
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    return _stay_change_calc(booking, hotel, check_in, check_out)
+
+@api_router.post("/admin/bookings/{booking_id}/change-stay")
+async def admin_change_stay(booking_id: str, data: StayChangeIn, admin: dict = Depends(get_current_admin)):
+    """Change arrival/departure dates; recalculates price, regenerates invoice, optionally emails the guest."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking["payment_status"] not in STAY_CHANGEABLE:
+        raise HTTPException(status_code=400, detail="Only bookings with a paid deposit can be changed")
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    if data.check_in == booking["check_in"] and data.check_out == booking["check_out"]:
+        raise HTTPException(status_code=400, detail="Dates are unchanged")
+    calc = _stay_change_calc(booking, hotel, data.check_in, data.check_out)
+    now = datetime.now(timezone.utc).isoformat()
+    old = {k: booking.get(k) for k in ("check_in", "check_out", "nights", "total_price", "deposit_amount", "remaining_amount", "payment_status")}
+    updates = {
+        "check_in": calc["check_in"], "check_out": calc["check_out"], "nights": calc["nights"], "price_per_night": calc["price_per_night"],
+        "total_price": calc["total_price"], "deposit_amount": calc["deposit_amount"], "remaining_amount": calc["remaining_amount"],
+        "payment_status": calc["payment_status"], "invoice_corrected_at": now, "updated_at": now,
+        "reminder_sent": False, "arrival_reminder_sent": False,
+    }
+    if calc["payment_status"] == "fully_paid" and old["payment_status"] != "fully_paid":
+        updates["fully_paid_at"] = now
+    await db.bookings.update_one(
+        {"id": booking_id},
+        {"$set": updates, "$push": {"edit_history": {"at": now, "by": admin.get("email"), "type": "stay_change", "changes": {k: {"from": old[k], "to": updates[k]} for k in old if old[k] != updates[k]}}}}
+    )
+    updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    await log_payment_event(updated, "stay_changed", f"Aufenthalt geändert {old['check_in']}–{old['check_out']} → {calc['check_in']}–{calc['check_out']}, neuer Gesamtpreis {calc['total_price']:.2f} €, Rest {calc['remaining_amount']:.2f} €")
+    email_sent = False
+    if data.send_email:
+        lang = updated.get("language", "de")
+        pdf = generate_invoice_pdf(updated, hotel, lang)
+        subject, body = generate_stay_change_email(updated, old, hotel, lang, get_invoice_link(booking_id), calc["paid"], calc["refund_due"])
+        asyncio.create_task(send_email(updated["email"], subject, body, pdf, f"Invoice_{updated['invoice_number']}.pdf",
+                                       email_type="stay_change", booking=updated, bcc_admin=True))
+        email_sent = True
+    return {"message": "Stay changed", "booking": updated, "refund_due": calc["refund_due"], "email_sent": email_sent}
 
 @api_router.post("/admin/bookings/{booking_id}/resend-confirmation")
 async def admin_resend_confirmation(booking_id: str, admin: dict = Depends(get_current_admin)):

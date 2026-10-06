@@ -3,6 +3,8 @@ Email Templates Service for HBH Hotel Booking
 Provides consistent, bilingual email templates for all communications.
 """
 
+from datetime import datetime
+
 SALUTATION_LABELS = {
     "de": {"Herr": "Herr", "Frau": "Frau", "Mrs": "Frau", "Mr": "Herr", "Ms": "Frau"},
     "en": {"Herr": "Mr", "Frau": "Ms", "Mrs": "Mrs", "Mr": "Mr", "Ms": "Ms"},
@@ -164,6 +166,65 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
     
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
     return subject, full_body
+
+
+def generate_stay_change_email(booking: dict, old: dict, hotel: dict, lang: str, invoice_link: str, paid: float, refund_due: float = 0.0) -> tuple:
+    """Rebooking confirmation after the admin changed arrival/departure dates."""
+    fmt_date = lambda d: datetime.strptime(d, "%Y-%m-%d").strftime("%d.%m.%Y") if d else ""
+    remaining = booking["remaining_amount"]
+    if lang == "de":
+        title = "Buchungsänderung"
+        subject = f"Buchungsänderung - {booking['booking_number']}"
+        if refund_due > 0:
+            payment_note = f"<p>Durch die Änderung ergibt sich ein Guthaben von <strong>{format_price_de(refund_due)} €</strong>, das wir Ihnen erstatten.</p>"
+        elif remaining > 0:
+            payment_note = f"<p><strong>Wichtig:</strong> Der neue Restbetrag von <strong>{format_price_de(remaining)} €</strong> ist 6 Wochen vor Anreise fällig. Sie erhalten rechtzeitig eine Zahlungserinnerung mit Zahlungslink und Bankverbindung.</p>"
+        else:
+            payment_note = "<p>Ihre Buchung ist weiterhin <strong>vollständig bezahlt</strong>.</p>"
+        body = f"""
+                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
+                <p>wie gewünscht haben wir Ihren Aufenthalt im <strong>{hotel['name']}</strong> geändert. Hier die aktualisierten Daten:</p>
+                <div class="highlight-box"><strong>Buchungsnummer: {booking['booking_number']}</strong></div>
+                <table class="info-table">
+                    <tr><td>Bisher:</td><td>{fmt_date(old['check_in'])} – {fmt_date(old['check_out'])} ({old['nights']} Nächte)</td></tr>
+                    <tr><td><strong>Neu:</strong></td><td><strong>{fmt_date(booking['check_in'])} – {fmt_date(booking['check_out'])} ({booking['nights']} Nächte)</strong></td></tr>
+                    <tr><td>Zimmertyp:</td><td>{booking.get('room_type_display', booking.get('room_type', ''))}</td></tr>
+                    <tr><td>Neuer Gesamtpreis:</td><td><strong>{format_price_de(booking['total_price'])} €</strong> (bisher {format_price_de(old['total_price'])} €)</td></tr>
+                    <tr><td>Bereits bezahlt:</td><td>{format_price_de(paid)} €</td></tr>
+                    <tr><td>Restbetrag:</td><td><strong>{format_price_de(remaining)} €</strong></td></tr>
+                </table>
+                {payment_note}
+                <p>Die aktualisierte Rechnung finden Sie im Anhang dieser E-Mail.</p>
+                <p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Rechnung herunterladen</a></p>
+                <p>Wir freuen uns auf Ihren Besuch beim Festival Happy Birthday Händel 2027!</p>
+        """
+    else:
+        title = "Booking Change"
+        subject = f"Booking Change - {booking['booking_number']}"
+        if refund_due > 0:
+            payment_note = f"<p>The change results in a credit of <strong>€{refund_due:.2f}</strong>, which we will refund to you.</p>"
+        elif remaining > 0:
+            payment_note = f"<p><strong>Important:</strong> The new remaining balance of <strong>€{remaining:.2f}</strong> is due 6 weeks before arrival. You will receive a payment reminder with payment link and bank details in time.</p>"
+        else:
+            payment_note = "<p>Your booking remains <strong>fully paid</strong>.</p>"
+        body = f"""
+                <p>Dear {greeting_name(booking, 'en')},</p>
+                <p>As requested, we have changed your stay at <strong>{hotel.get('name_en', hotel['name'])}</strong>. Here are the updated details:</p>
+                <div class="highlight-box"><strong>Booking Number: {booking['booking_number']}</strong></div>
+                <table class="info-table">
+                    <tr><td>Previously:</td><td>{fmt_date(old['check_in'])} – {fmt_date(old['check_out'])} ({old['nights']} nights)</td></tr>
+                    <tr><td><strong>New:</strong></td><td><strong>{fmt_date(booking['check_in'])} – {fmt_date(booking['check_out'])} ({booking['nights']} nights)</strong></td></tr>
+                    <tr><td>Room Type:</td><td>{booking.get('room_type_display', booking.get('room_type', ''))}</td></tr>
+                    <tr><td>New Total Price:</td><td><strong>€{booking['total_price']:.2f}</strong> (previously €{old['total_price']:.2f})</td></tr>
+                    <tr><td>Already paid:</td><td>€{paid:.2f}</td></tr>
+                    <tr><td>Remaining Balance:</td><td><strong>€{remaining:.2f}</strong></td></tr>
+                </table>
+                {payment_note}
+                <p>Please find your updated invoice attached to this email.</p>
+                <p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">Download Invoice</a></p>
+                <p>We look forward to welcoming you at the Happy Birthday Händel 2027 festival!</p>
+        """
+    return subject, get_email_header(title, lang) + body + get_email_footer(lang)
 
 
 def generate_remaining_payment_confirmation_email(booking: dict, hotel: dict, payment_method: str, lang: str = "de") -> tuple:

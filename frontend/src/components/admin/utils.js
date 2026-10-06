@@ -138,7 +138,8 @@ const PAYMENT_EVENT_LABELS = {
     capture_failed: 'Zahlung von PayPal abgelehnt',
     capture_completed: 'Zahlung erfolgreich',
     transfer_reserved: 'Reserviert – Überweisung ausstehend',
-    transfer_expired: 'Überweisung nicht eingegangen – freigegeben'
+    transfer_expired: 'Überweisung nicht eingegangen – freigegeben',
+    stay_changed: 'Aufenthalt geändert (Umbuchung)'
   },
   en: {
     booking_created: 'Booking created, PayPal not opened',
@@ -149,7 +150,8 @@ const PAYMENT_EVENT_LABELS = {
     capture_failed: 'Payment declined by PayPal',
     capture_completed: 'Payment successful',
     transfer_reserved: 'Reserved – bank transfer pending',
-    transfer_expired: 'Transfer not received – released'
+    transfer_expired: 'Transfer not received – released',
+    stay_changed: 'Stay changed (rebooking)'
   }
 };
 
