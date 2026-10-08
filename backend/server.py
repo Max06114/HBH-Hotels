@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
+import re
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -1929,6 +1930,26 @@ async def admin_login(login_data: AdminLogin):
     
     token = create_token({"sub": admin["email"]})
     return {"token": token, "email": admin["email"]}
+
+class AdminPasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/admin/change-password")
+async def admin_change_password(data: AdminPasswordChange, admin: dict = Depends(get_current_admin)):
+    record = await db.admins.find_one({"email": admin["email"]}, {"_id": 0})
+    if not record or not verify_password(data.current_password, record["password_hash"]):
+        raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
+    pw = data.new_password
+    if len(pw) < 10 or not re.search(r"[A-Za-z]", pw) or not re.search(r"\d", pw):
+        raise HTTPException(status_code=400, detail="Neues Passwort: mindestens 10 Zeichen, mit Buchstaben und Ziffern")
+    if pw == data.current_password:
+        raise HTTPException(status_code=400, detail="Neues Passwort muss sich vom aktuellen unterscheiden")
+    await db.admins.update_one(
+        {"email": admin["email"]},
+        {"$set": {"password_hash": hash_password(pw), "password_changed_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Password changed"}
 
 @api_router.post("/admin/setup")
 async def setup_admin(admin_data: AdminCreate):

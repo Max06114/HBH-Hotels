@@ -1,17 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
   LayoutDashboard, Hotel, CalendarCheck, CreditCard, LogOut, 
-  Bell, Clock, Image as ImageIcon, Package, Music, BarChart3, FileText, Mail, MailCheck, Bus
+  Bell, Clock, Image as ImageIcon, Package, Music, BarChart3, FileText, Mail, MailCheck, Bus, KeyRound
 } from 'lucide-react';
+import ChangePasswordDialog from './ChangePasswordDialog';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const { t, language } = useLanguage();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [pwOpen, setPwOpen] = useState(false);
 
   const menuItems = [
     { path: '/admin', icon: LayoutDashboard, label: t('adminDashboard') },
@@ -86,8 +88,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             </ul>
           </nav>
 
-          {/* Logout */}
+          {/* Account */}
           <div className="p-4 border-t border-white/10">
+            <button
+              onClick={() => setPwOpen(true)}
+              className="flex items-center gap-3 px-4 py-3 w-full text-white/70 hover:text-white transition-colors"
+              data-testid="admin-change-password-btn"
+            >
+              <KeyRound className="w-5 h-5" />
+              {language === 'de' ? 'Passwort ändern' : 'Change password'}
+            </button>
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-3 w-full text-white/70 hover:text-white transition-colors"
@@ -99,6 +109,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </div>
         </div>
       </aside>
+      <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} language={language} />
     </>
   );
 };
