@@ -10,8 +10,9 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Loader2, Bus, Send, Download, RefreshCw, Upload, Bell, Trash2 } from 'lucide-react';
+import { Loader2, Bus, Send, Download, RefreshCw, Upload, Bell, Trash2, Pencil, Link2 } from 'lucide-react';
 import { API } from './utils';
+import TransferResponseDialog from './TransferResponseDialog';
 
 const INTEREST = { both: 'Hin + Rück', outbound: 'Nur Hin', return: 'Nur Rück', none: 'Kein Interesse' };
 
@@ -24,6 +25,7 @@ const TransferManagement = () => {
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState('');
   const [filter, setFilter] = useState('all');
+  const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +57,10 @@ const TransferManagement = () => {
   const doImport = () => run('import', () => axios.post(`${API}/admin/transfer/import`, { text: importText }, H), (d) => { setImportText(''); return `${d.created} importiert, ${d.skipped} übersprungen (Duplikat/ungültig)`; });
   const sendSurvey = () => window.confirm(`Umfrage-E-Mail an alle noch nicht eingeladenen Kontakte senden?`) && run('send', () => axios.post(`${API}/admin/transfer/send-survey`, { only_unanswered: false, only_not_invited: true }, H), (d) => `${d.sent} gesendet, ${d.failed} fehlgeschlagen`);
   const sendReminder = () => window.confirm('Erinnerung an alle Eingeladenen ohne Antwort senden?') && run('remind', () => axios.post(`${API}/admin/transfer/send-survey`, { only_unanswered: true, only_not_invited: false }, H), (d) => `${d.sent} Erinnerungen gesendet`);
+  const copyLink = async (c) => {
+    try { await navigator.clipboard.writeText(`${window.location.origin}/transfer/${c.token}`); toast.success('Persönlicher Formular-Link kopiert'); }
+    catch { toast.error('Kopieren nicht möglich'); }
+  };
   const deleteContact = (c) => window.confirm(`Eintrag von ${c.name} (${c.email}) inkl. Antwort endgültig löschen?`) && run(`del-${c.id}`, () => axios.delete(`${API}/admin/transfer/contacts/${c.id}`, H), 'Eintrag gelöscht');
   const exportCsv = async () => {
     const res = await axios.get(`${API}/admin/transfer/export`, { ...H, responseType: 'blob' });
@@ -132,7 +138,9 @@ const TransferManagement = () => {
                 <TableCell>{r ? <>{r.persons}{r.companions?.length > 0 && <p className="text-xs text-[#4A4A4A]" title={r.companions.join(', ')}>+ {r.companions.join(', ')}</p>}</> : ''}</TableCell>
                 <TableCell>{r?.arrives_by_plane ? <Badge className={r.interest === 'none' ? 'bg-gray-100 text-gray-700' : 'bg-[#F5F2EA] text-[#6B1D2A]'}>{INTEREST[r.interest] || r.interest}</Badge> : ''}</TableCell>
                 <TableCell className="text-xs max-w-[200px] truncate" title={r?.notes || ''}>{r?.notes || ''}</TableCell>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <Button variant="ghost" size="icon" onClick={() => setEditing(c)} title={r ? 'Transferwunsch bearbeiten' : 'Transferwunsch erfassen'} data-testid={`transfer-edit-${c.id}`} className="text-[#4A4A4A] hover:text-[#6B1D2A]"><Pencil className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => copyLink(c)} title="Persönlichen Formular-Link kopieren" data-testid={`transfer-link-${c.id}`} className="text-[#4A4A4A] hover:text-[#6B1D2A]"><Link2 className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteContact(c)} disabled={busy === `del-${c.id}`} title="Eintrag löschen" data-testid={`transfer-delete-${c.id}`} className="text-[#4A4A4A] hover:text-red-700">
                     {busy === `del-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </Button>
@@ -142,6 +150,7 @@ const TransferManagement = () => {
         </Table>
         {rows.length === 0 && <p className="text-center py-10 text-[#4A4A4A]" data-testid="transfer-empty">Keine Kontakte.</p>}
       </CardContent></Card>
+      <TransferResponseDialog contact={editing} headers={H} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
     </div>
   );
 };

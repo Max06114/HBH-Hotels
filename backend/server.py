@@ -2507,6 +2507,43 @@ async def public_transfer_respond(data: TransferResponseIn):
     await db.transfer_contacts.update_one({"id": contact["id"]}, {"$set": {"responded_at": now, "name": data.name.strip() or contact["name"]}})
     return {"message": "Thank you – your travel plans have been saved.", "token": contact["token"]}
 
+class AdminTransferResponseIn(BaseModel):
+    name: Optional[str] = None
+    arrival_date: Optional[str] = None
+    arrival_time: Optional[str] = None
+    arrival_flight: Optional[str] = None
+    departure_date: Optional[str] = None
+    departure_time: Optional[str] = None
+    departure_flight: Optional[str] = None
+    persons: int = 1
+    companions: List[str] = []
+    interest: str = "both"
+    notes: Optional[str] = None
+
+@api_router.put("/admin/transfer/contacts/{contact_id}/response")
+async def admin_transfer_set_response(contact_id: str, data: AdminTransferResponseIn, admin: dict = Depends(get_current_admin)):
+    """Admin records/updates a guest's travel plans (e.g. from an email request)."""
+    contact = await db.transfer_contacts.find_one({"id": contact_id}, {"_id": 0})
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    if data.interest not in ("outbound", "return", "both", "none"):
+        raise HTTPException(status_code=400, detail="Invalid interest")
+    if data.persons < 1 or data.persons > 20:
+        raise HTTPException(status_code=400, detail="persons must be 1-20")
+    now = datetime.now(timezone.utc).isoformat()
+    payload = data.model_dump(exclude={"name"})
+    payload["companions"] = [c.strip() for c in data.companions if c.strip()][: max(0, data.persons - 1)]
+    payload.update({"contact_id": contact["id"], "email": contact["email"], "name": (data.name or contact["name"]).strip(),
+                    "arrives_by_plane": True, "airport": "BER", "updated_at": now, "edited_by_admin": admin.get("email")})
+    existing = await db.transfer_responses.find_one({"contact_id": contact["id"]}, {"_id": 0, "id": 1})
+    if existing:
+        await db.transfer_responses.update_one({"id": existing["id"]}, {"$set": payload})
+    else:
+        payload.update({"id": str(uuid.uuid4()), "submitted_at": now})
+        await db.transfer_responses.insert_one(payload)
+    await db.transfer_contacts.update_one({"id": contact["id"]}, {"$set": {"responded_at": now, "name": payload["name"]}})
+    return await db.transfer_responses.find_one({"contact_id": contact["id"]}, {"_id": 0})
+
 class TransferSettingsIn(BaseModel):
     deadline: Optional[str] = None
     price: Optional[float] = None
