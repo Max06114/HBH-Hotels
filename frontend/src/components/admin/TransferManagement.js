@@ -53,7 +53,7 @@ const TransferManagement = () => {
   };
   const H = { headers: getAuthHeaders() };
   const saveSettings = () => run('settings', () => axios.put(`${API}/admin/transfer/settings`, settings, H), 'Einstellungen gespeichert');
-  const syncBookings = () => run('sync', () => axios.post(`${API}/admin/transfer/sync-bookings`, {}, H), (d) => `${d.created} neue Kontakte aus ${d.bookings} Buchungen`);
+  const syncBookings = () => run('sync', () => axios.post(`${API}/admin/transfer/sync-bookings`, {}, H), (d) => `${d.created} neue Kontakte aus ${d.bookings} irischen Buchungen${d.removed ? `, ${d.removed} Nicht-Iren ohne Antwort entfernt` : ''}`);
   const doImport = () => run('import', () => axios.post(`${API}/admin/transfer/import`, { text: importText }, H), (d) => { setImportText(''); return `${d.created} importiert, ${d.skipped} übersprungen (Duplikat/ungültig)`; });
   const sendSurvey = () => window.confirm(`Umfrage-E-Mail an alle noch nicht eingeladenen Kontakte senden?`) && run('send', () => axios.post(`${API}/admin/transfer/send-survey`, { only_unanswered: false, only_not_invited: true }, H), (d) => `${d.sent} gesendet, ${d.failed} fehlgeschlagen`);
   const sendReminder = () => window.confirm('Erinnerung an alle Eingeladenen ohne Antwort senden?') && run('remind', () => axios.post(`${API}/admin/transfer/send-survey`, { only_unanswered: true, only_not_invited: false }, H), (d) => `${d.sent} Erinnerungen gesendet`);
@@ -103,7 +103,7 @@ const TransferManagement = () => {
         <Card className="border-[#E5E0D5]"><CardContent className="p-6 space-y-4">
           <h2 className="font-semibold">Kontakte & Versand</h2>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={syncBookings} disabled={!!busy} data-testid="transfer-sync-btn"><RefreshCw className="w-4 h-4 mr-2" />Hotelbuchungen übernehmen</Button>
+            <Button variant="outline" onClick={syncBookings} disabled={!!busy} data-testid="transfer-sync-btn"><RefreshCw className="w-4 h-4 mr-2" />Irische Buchungen übernehmen</Button>
             <Button onClick={sendSurvey} disabled={!!busy} className="bg-[#6B1D2A] hover:bg-[#8A2536] text-white" data-testid="transfer-send-btn"><Send className="w-4 h-4 mr-2" />Umfrage senden (neue Kontakte)</Button>
             <Button variant="outline" onClick={sendReminder} disabled={!!busy} data-testid="transfer-remind-btn"><Bell className="w-4 h-4 mr-2" />Erinnerung an Nicht-Antworter</Button>
           </div>

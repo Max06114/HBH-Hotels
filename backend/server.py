@@ -860,7 +860,7 @@ async def build_confirmation_email(booking: dict, hotel: dict, lang: str) -> tup
     transfer_html = ""
     try:
         t_settings = await get_transfer_settings()
-        if t_settings.get("status") == "survey":
+        if t_settings.get("status") == "survey" and is_irish(booking.get("country")):
             contact = await get_or_create_transfer_contact(booking["email"], f"{booking['first_name']} {booking['last_name']}", "booking", booking)
             transfer_html = transfer_confirmation_block(contact["token"], t_settings)
     except Exception as e:
@@ -2434,6 +2434,15 @@ async def get_transfer_settings() -> dict:
     doc = await db.settings.find_one({"key": "transfer"}, {"_id": 0})
     return {**TRANSFER_DEFAULTS, **(doc or {})}
 
+IRELAND_NAMES = {"ireland", "irland", "eire", "éire", "ie", "irl", "republic of ireland", "rep. of ireland", "ireland (republic)", "irlande", "irlanda", "poblacht na héireann"}
+
+def is_irish(country: Optional[str]) -> bool:
+    """Republic of Ireland only (Northern Ireland excluded)."""
+    c = (country or "").strip().lower().rstrip(".")
+    if not c or "north" in c or "nord" in c:
+        return False
+    return c in IRELAND_NAMES or "ireland" in c or "irland" in c or "éire" in c
+
 def transfer_link(token: str) -> str:
     return f"{os.environ.get('FRONTEND_URL', 'https://event-payments-3.preview.emergentagent.com')}/transfer/{token}"
 
@@ -2627,12 +2636,17 @@ async def admin_transfer_import(data: TransferImportIn, admin: dict = Depends(ge
 
 @api_router.post("/admin/transfer/sync-bookings")
 async def admin_transfer_sync_bookings(admin: dict = Depends(get_current_admin)):
-    """Create transfer contacts for all bookings that are not cancelled/abandoned/expired."""
+    """Add active Irish bookings; remove unanswered contacts from non-Irish bookings."""
     bookings = await db.bookings.find({"payment_status": {"$nin": ["cancelled", "abandoned", "expired", "refunded"]}}, {"_id": 0}).to_list(5000)
+    irish = [b for b in bookings if is_irish(b.get("country"))]
+    country_by_id = {b["id"]: b.get("country") for b in await db.bookings.find({}, {"_id": 0, "id": 1, "country": 1}).to_list(10000)}
+    stale = [c["id"] for c in await db.transfer_contacts.find({"booking_id": {"$ne": None}, "responded_at": {"$exists": False}}, {"_id": 0, "id": 1, "booking_id": 1}).to_list(5000)
+             if not is_irish(country_by_id.get(c["booking_id"]))]
+    removed = (await db.transfer_contacts.delete_many({"id": {"$in": stale}})).deleted_count if stale else 0
     before = await db.transfer_contacts.count_documents({})
-    for b in bookings:
+    for b in irish:
         await get_or_create_transfer_contact(b["email"], f"{b['first_name']} {b['last_name']}", "booking", b)
-    return {"bookings": len(bookings), "created": await db.transfer_contacts.count_documents({}) - before}
+    return {"bookings": len(irish), "created": await db.transfer_contacts.count_documents({}) - before, "removed": removed}
 
 class TransferSendIn(BaseModel):
     only_unanswered: bool = False

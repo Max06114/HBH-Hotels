@@ -259,3 +259,4 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - Lokal getestet mit `/app/tests/local_bounce_alert_test.py`.
 - 2026-10-30 LIVE verifiziert: Webhook 200, delivered-Status im Protokoll, Bounce-Warnung kommt an (Test mit bounced@resend.dev), Links zeigen auf hbh-hotels.travel-events.de. Danach: Grund nutzt diagnosticCode (SMTP-Code) statt Resend-Standardtext – noch zu pushen.
 - Hinweis: Tests nur mit bounced@resend.dev, keine Fantasie-Domains (stundenlang "delayed").
+- 2026-10-30: Transfer nur für Gäste aus der Republik Irland (`is_irish(country)`, Nordirland ausgeschlossen): Transfer-Abschnitt in Buchungsbestätigung + automatische Aufnahme nur für Iren; „Irische Buchungen übernehmen“ nimmt nur Iren auf und entfernt Nicht-Iren ohne Antwort (Import-/Homepage-Kontakte bleiben). Test: /app/tests/local_irish_transfer_test.py
