@@ -2394,7 +2394,9 @@ async def resend_webhook(request: Request):
     update = {"delivery_status": status, "delivery_updated_at": event.get("created_at") or datetime.now(timezone.utc).isoformat()}
     bounce = (event.get("data") or {}).get("bounce") or {}
     if status == "bounced":
-        update["bounce_reason"] = f"{bounce.get('type', '')} {bounce.get('subType', '')}: {bounce.get('message', '')}".strip(" :")
+        diag = bounce.get("diagnosticCode")
+        diag = "; ".join(diag) if isinstance(diag, list) else (diag or "")
+        update["bounce_reason"] = f"{bounce.get('type', '')} {bounce.get('subType', '')}: {diag or bounce.get('message', '')}".strip(" :")
     await db.email_logs.update_one({"provider_message_id": email_id}, {"$set": update})
     if status in ("bounced", "complained") and log.get("delivery_status") != status and log.get("email_type") != "admin_alert":
         await notify_admin_delivery_problem(log, status, update.get("bounce_reason"), email_id)

@@ -257,3 +257,5 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - Buchungsbestätigung (PDF im Anhang) enthält keinen „Rechnung herunterladen“-Link mehr (Standard- und eigene Vorlagen). Andere Mails behalten den Link (Basis: FRONTEND_URL).
 - NUTZER MUSS in Railway: FRONTEND_URL=https://hbh-hotels.travel-events.de, RESEND_WEBHOOK_SECRET setzen; Resend-Webhook auf https://hbh-hotels-production.up.railway.app/api/webhooks/resend (Events email.*).
 - Lokal getestet mit `/app/tests/local_bounce_alert_test.py`.
+- 2026-10-30 LIVE verifiziert: Webhook 200, delivered-Status im Protokoll, Bounce-Warnung kommt an (Test mit bounced@resend.dev), Links zeigen auf hbh-hotels.travel-events.de. Danach: Grund nutzt diagnosticCode (SMTP-Code) statt Resend-Standardtext – noch zu pushen.
+- Hinweis: Tests nur mit bounced@resend.dev, keine Fantasie-Domains (stundenlang "delayed").
