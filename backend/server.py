@@ -856,8 +856,7 @@ def render_custom_template(text: str, booking: dict, hotel: dict, lang: str, tit
     return get_email_header(title, lang) + paragraphs + extra_html + get_email_footer(lang)
 
 async def build_confirmation_email(booking: dict, hotel: dict, lang: str) -> tuple:
-    """Booking confirmation: admin template if set, otherwise the standard email."""
-    invoice_link = get_invoice_link(booking["id"])
+    """Booking confirmation (invoice PDF is attached, so no download link)."""
     transfer_html = ""
     try:
         t_settings = await get_transfer_settings()
@@ -868,11 +867,10 @@ async def build_confirmation_email(booking: dict, hotel: dict, lang: str) -> tup
         logger.warning(f"Transfer block skipped: {e}")
     custom = await get_custom_template(booking["hotel_id"], "booking_confirmation", lang)
     if not custom:
-        return generate_booking_confirmation_email(booking, hotel, lang, invoice_link, transfer_html)
+        return generate_booking_confirmation_email(booking, hotel, lang, None, transfer_html)
     subject = f"Buchungsbestätigung - {booking['booking_number']}" if lang == "de" else f"Booking Confirmation - {booking['booking_number']}"
     title = "Buchungsbestätigung" if lang == "de" else "Booking Confirmation"
-    extra = f'<p style="text-align:center; margin-top: 20px;"><a href="{invoice_link}" class="btn btn-secondary">{"Rechnung herunterladen" if lang == "de" else "Download Invoice"}</a></p>' + transfer_html
-    return subject, render_custom_template(custom, booking, hotel, lang, title, extra)
+    return subject, render_custom_template(custom, booking, hotel, lang, title, transfer_html)
 
 async def build_arrival_reminder_email(booking: dict, hotel: dict, lang: str) -> tuple:
     custom = await get_custom_template(booking["hotel_id"], "arrival_reminder", lang)
@@ -2387,7 +2385,7 @@ async def resend_webhook(request: Request):
     email_id = (event.get("data") or {}).get("email_id")
     if not status or not email_id:
         return {"ignored": True}
-    log = await db.email_logs.find_one({"provider_message_id": email_id}, {"_id": 0, "delivery_status": 1})
+    log = await db.email_logs.find_one({"provider_message_id": email_id}, {"_id": 0})
     if not log:
         return {"ignored": True, "reason": "unknown email_id"}
     rank = {"sent": 1, "delayed": 2, "delivered": 3, "opened": 4, "bounced": 5, "complained": 5, "failed": 5}
@@ -2398,7 +2396,32 @@ async def resend_webhook(request: Request):
     if status == "bounced":
         update["bounce_reason"] = f"{bounce.get('type', '')} {bounce.get('subType', '')}: {bounce.get('message', '')}".strip(" :")
     await db.email_logs.update_one({"provider_message_id": email_id}, {"$set": update})
+    if status in ("bounced", "complained") and log.get("delivery_status") != status and log.get("email_type") != "admin_alert":
+        await notify_admin_delivery_problem(log, status, update.get("bounce_reason"), email_id)
     return {"updated": True, "status": status}
+
+async def notify_admin_delivery_problem(log: dict, status: str, reason: str, email_id: str):
+    """Warn the admin about a bounce or spam complaint reported by Resend."""
+    to = log.get("to_email", "-")
+    title = "E-Mail nicht zugestellt (Bounce)" if status == "bounced" else "Spam-Beschwerde eines Empfängers"
+    hint = ("Bitte den Gast auf anderem Weg kontaktieren (z. B. per Outlook oder Telefon) und ggf. nach einer alternativen E-Mail-Adresse fragen. "
+            "Die E-Mail kann danach über die Buchungsliste erneut gesendet werden.") if status == "bounced" else \
+           "Der Empfänger hat die E-Mail als Spam markiert. Häufige Beschwerden schaden der Absender-Reputation – an diese Adresse vorerst nichts Automatisches mehr senden."
+    rows = [("Empfänger", to), ("Betreff", log.get("subject", "-")), ("Buchung", log.get("booking_number") or "-"),
+            ("Typ", log.get("email_type", "-")), ("Gesendet", (log.get("sent_at") or "-")[:16].replace("T", " "))]
+    if reason:
+        rows.append(("Grund", reason))
+    table = "".join(f'<tr><td style="padding:6px 12px 6px 0;"><strong>{k}:</strong></td><td>{v}</td></tr>' for k, v in rows)
+    body = f"""
+    <html><body style="font-family: Arial, sans-serif; color: #1A1A1A;">
+        <h2 style="color: #B91C1C;">{title}</h2>
+        <table style="border-collapse: collapse;">{table}</table>
+        <p style="background:#FEF3C7; padding:12px; border-radius:6px;">{hint}</p>
+        <p>Details: Admin → E-Mail-Protokoll · Resend-ID {email_id}</p>
+    </body></html>
+    """
+    label = "Bounce" if status == "bounced" else "Spam-Beschwerde"
+    await send_email(ADMIN_EMAIL, f"[HBH] {label}: {to} ({log.get('booking_number') or '-'})", body, email_type="admin_alert")
 
 # ============== AIRPORT TRANSFER SURVEY (Stage 1) ==============
 

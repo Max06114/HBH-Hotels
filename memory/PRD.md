@@ -251,3 +251,9 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 ## 2026-06 – Transfer: Admin-Nachtrag
 - Admin kann Transferwünsche pro Kontakt erfassen/bearbeiten (Stift-Symbol, `PUT /api/admin/transfer/contacts/{id}/response`) und persönlichen Formularlink kopieren (Link-Symbol).
 - Backend lokal getestet (Speichern, 401 ohne Login, 404, 400, Übersicht + öffentliches Formular zeigen Änderung). Browser-Test des Dialogs steht aus.
+
+## 2026-10 – Bounce-Warnungen & Zustellbarkeit
+- Resend-Webhook (`POST /api/webhooks/resend`, Svix-Signatur) schickt bei `bounced`/`complained` eine Warn-Mail an ADMIN_EMAIL (Empfänger, Betreff, Buchung, Grund, Resend-ID); nur einmal pro E-Mail und Status, nicht für admin_alert-Mails, keine Warn-Mail bei Verzögerungen (Nutzerwunsch).
+- Buchungsbestätigung (PDF im Anhang) enthält keinen „Rechnung herunterladen“-Link mehr (Standard- und eigene Vorlagen). Andere Mails behalten den Link (Basis: FRONTEND_URL).
+- NUTZER MUSS in Railway: FRONTEND_URL=https://hbh-hotels.travel-events.de, RESEND_WEBHOOK_SECRET setzen; Resend-Webhook auf https://hbh-hotels-production.up.railway.app/api/webhooks/resend (Events email.*).
+- Lokal getestet mit `/app/tests/local_bounce_alert_test.py`.
