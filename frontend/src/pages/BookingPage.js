@@ -40,7 +40,7 @@ const BookingPage = () => {
     salutation: formData.salutation,
     first_name: formData.firstName,
     last_name: formData.lastName,
-    email: formData.email,
+    email: formData.email.trim(),
     street: formData.street,
     postal_code: formData.postalCode,
     city: formData.city,
@@ -163,6 +163,10 @@ const BookingPage = () => {
     if (!formData.salutation || !formData.firstName || !formData.lastName || !formData.email || 
         !formData.street || !formData.postalCode || !formData.city || !formData.country) {
       toast.error(language === 'de' ? 'Bitte füllen Sie alle Pflichtfelder aus' : 'Please fill in all required fields');
+      return false;
+    }
+    if (!/^[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+$/.test(formData.email.trim())) {
+      toast.error(language === 'de' ? 'Bitte prüfen Sie Ihre E-Mail-Adresse' : 'Please check your email address');
       return false;
     }
     return true;

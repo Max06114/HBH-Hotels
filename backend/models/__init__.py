@@ -202,7 +202,7 @@ class PayPalOrderRequest(BaseModel):
     salutation: str
     first_name: str
     last_name: str
-    email: str
+    email: EmailStr
     street: str
     postal_code: str
     city: str

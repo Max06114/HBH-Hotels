@@ -121,8 +121,9 @@ const BookingsManagement = () => {
   const handleResendConfirmation = async (booking) => {
     setResendingId(booking.id);
     try {
-      await axios.post(`${API}/admin/bookings/${booking.id}/resend-confirmation`, {}, { headers: getAuthHeaders() });
-      toast.success(language === 'de' ? `Bestätigung an ${booking.email} gesendet` : `Confirmation sent to ${booking.email}`);
+      const isTransfer = booking.payment_status === 'transfer_pending';
+      await axios.post(`${API}/admin/bookings/${booking.id}/${isTransfer ? 'resend-transfer-instructions' : 'resend-confirmation'}`, {}, { headers: getAuthHeaders() });
+      toast.success(language === 'de' ? `${isTransfer ? 'Überweisungsdaten' : 'Bestätigung'} an ${booking.email} gesendet` : `${isTransfer ? 'Bank transfer details' : 'Confirmation'} sent to ${booking.email}`);
     } catch (error) {
       toast.error(language === 'de' ? 'E-Mail konnte nicht gesendet werden' : 'Email could not be sent');
     } finally {
@@ -345,13 +346,15 @@ const BookingsManagement = () => {
                             <CalendarDays className="w-4 h-4" />
                           </Button>
                         )}
-                        {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
+                        {['deposit_paid', 'fully_paid', 'transfer_pending'].includes(booking.payment_status) && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleResendConfirmation(booking)}
                             disabled={resendingId === booking.id}
-                            title={language === 'de' ? 'Bestätigung erneut senden' : 'Resend confirmation'}
+                            title={booking.payment_status === 'transfer_pending'
+                              ? (language === 'de' ? 'Überweisungsdaten (Anzahlung) erneut senden' : 'Resend bank transfer details')
+                              : (language === 'de' ? 'Bestätigung erneut senden' : 'Resend confirmation')}
                             className="text-[#6B1D2A]"
                             data-testid={`resend-confirmation-${booking.id}`}
                           >

@@ -2323,6 +2323,23 @@ async def admin_change_stay(booking_id: str, data: StayChangeIn, admin: dict = D
         email_sent = True
     return {"message": "Stay changed", "booking": updated, "refund_due": calc["refund_due"], "email_sent": email_sent}
 
+@api_router.post("/admin/bookings/{booking_id}/resend-transfer-instructions")
+async def resend_transfer_instructions(booking_id: str, admin: dict = Depends(get_current_admin)):
+    """Resend the bank transfer instructions (deposit) for a reserved booking."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.get("payment_status") != "transfer_pending":
+        raise HTTPException(status_code=400, detail="Booking is not awaiting a bank transfer")
+    hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+    lang = booking.get("language", "de")
+    subject, body = generate_bank_transfer_email(booking, hotel, BANK_DETAILS, _de_date(booking["transfer_due_date"]), get_invoice_link(booking_id), lang)
+    if not await send_email(booking["email"], subject, body, email_type="bank_transfer_instructions_resend", booking=booking, bcc_admin=True):
+        raise HTTPException(status_code=500, detail="Email could not be sent")
+    return {"message": "Bank transfer instructions resent", "to": booking["email"]}
+
 @api_router.post("/admin/bookings/{booking_id}/resend-confirmation")
 async def admin_resend_confirmation(booking_id: str, admin: dict = Depends(get_current_admin)):
     """Resend the booking confirmation email with invoice PDF."""
