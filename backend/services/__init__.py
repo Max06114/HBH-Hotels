@@ -498,82 +498,61 @@ def generate_transfer_expired_email(booking: dict, hotel: dict, lang: str = "de"
     return subject, get_email_header(title, lang) + body + get_email_footer(lang)
 
 
-def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float, refund_percentage: int, lang: str = "de") -> tuple:
-    """Generate cancellation confirmation email."""
-    refund_formatted = format_price_de(refund_amount)
-    
-    if lang == "de":
+def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float, refund_percentage: int, lang: str = "de", paid_amount: float = 0) -> tuple:
+    """Cancellation confirmation with refund according to the cancellation policy."""
+    de = lang == "de"
+    fmt = (lambda v: f"{format_price_de(v)} €") if de else (lambda v: f"€{v:,.2f}")
+    check_in = datetime.strptime(booking["check_in"], "%Y-%m-%d").strftime("%d.%m.%Y" if de else "%d %B %Y")
+    paypal = booking.get("payment_method") == "paypal"
+    fee = round(paid_amount - refund_amount, 2)
+    if paid_amount <= 0:
+        refund_text = "<p>Es ist noch keine Zahlung bei uns eingegangen, daher erfolgt keine Rückerstattung.</p>" if de else \
+            "<p>We have not received any payment for this booking, so there is nothing to refund.</p>"
+    elif refund_amount <= 0:
+        refund_text = ('<div class="highlight-box"><p>Gemäß unseren Stornobedingungen ist bei einer Stornierung weniger als einen Tag vor Anreise leider keine Rückerstattung möglich.</p></div>' if de else
+                       '<div class="highlight-box"><p>According to our cancellation policy, no refund is possible for cancellations less than one day before arrival.</p></div>')
+    else:
+        how = (("Der Betrag wird Ihnen über PayPal zurückerstattet." if paypal else
+                "Bitte teilen Sie uns für die Rücküberweisung per Antwort auf diese E-Mail Ihre IBAN und den Namen des Kontoinhabers mit.") if de else
+               ("The amount will be refunded to you via PayPal." if paypal else
+                "For the refund, please reply to this email with your IBAN and the name of the account holder."))
+        fee_row = (f'<tr><td>{"Stornogebühr" if de else "Cancellation fee"} ({100 - refund_percentage}%):</td><td>{fmt(fee)}</td></tr>' if fee > 0 else "")
+        refund_text = f"""
+                <table class="info-table">
+                    <tr><td>{"Bereits gezahlt" if de else "Amount paid"}:</td><td>{fmt(paid_amount)}</td></tr>
+                    {fee_row}
+                </table>
+                <div class="amount-box" style="background: #2E7D32;">
+                    <div>{"Rückerstattung" if de else "Refund"}</div>
+                    <div class="amount">{fmt(refund_amount)}</div>
+                </div>
+                <p>{how}</p>
+        """
+    if de:
         title = "Stornierungsbestätigung"
         subject = f"Stornierungsbestätigung - {booking['booking_number']}"
-        
-        if refund_amount > 0:
-            refund_text = f"""
-                <div class="amount-box" style="background: #2E7D32;">
-                    <div>Rückerstattung ({refund_percentage}%)</div>
-                    <div class="amount">{refund_formatted} €</div>
-                </div>
-                <p>Die Rückerstattung wird innerhalb von 5-10 Werktagen auf Ihrem Konto gutgeschrieben.</p>
-            """
-        else:
-            refund_text = """
-                <div class="highlight-box">
-                    <p>Aufgrund der kurzfristigen Stornierung (weniger als 1 Tag vor Anreise) ist leider keine Rückerstattung möglich.</p>
-                </div>
-            """
-        
-        body = f"""
-                <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
-                
-                <p>Ihre Buchung wurde storniert.</p>
-                
-                <table class="info-table">
-                    <tr><td>Buchungsnummer:</td><td>{booking['booking_number']}</td></tr>
-                    <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
-                    <tr><td>Geplante Anreise:</td><td>{booking['check_in']}</td></tr>
-                </table>
-                
-                {refund_text}
-                
-                <p>Wir bedauern, dass Sie nicht am Festival teilnehmen können und hoffen, Sie bei einer zukünftigen Veranstaltung begrüßen zu dürfen.</p>
-        """
+        intro, rows = "hiermit bestätigen wir die Stornierung Ihrer Buchung.", ("Buchungsnummer", "Hotel", "Geplante Anreise")
+        outro = "Wir bedauern, dass Sie nicht am Festival teilnehmen können, und hoffen, Sie bei einer zukünftigen Veranstaltung begrüßen zu dürfen."
+        greet = f"Sehr geehrte(r) {greeting_name(booking, 'de')},"
     else:
         title = "Cancellation Confirmation"
         subject = f"Cancellation Confirmation - {booking['booking_number']}"
-        
-        if refund_amount > 0:
-            refund_text = f"""
-                <div class="amount-box" style="background: #2E7D32;">
-                    <div>Refund ({refund_percentage}%)</div>
-                    <div class="amount">€{refund_amount:.2f}</div>
-                </div>
-                <p>The refund will be credited to your account within 5-10 business days.</p>
-            """
-        else:
-            refund_text = """
-                <div class="highlight-box">
-                    <p>Due to the late cancellation (less than 1 day before arrival), unfortunately no refund is possible.</p>
-                </div>
-            """
-        
-        body = f"""
-                <p>Dear {greeting_name(booking, 'en')},</p>
-                
-                <p>Your booking has been cancelled.</p>
-                
+        intro, rows = "We hereby confirm the cancellation of your booking.", ("Booking Number", "Hotel", "Planned Check-in")
+        outro = "We regret that you cannot attend the festival and hope to welcome you at a future event."
+        greet = f"Dear {greeting_name(booking, 'en')},"
+    body = f"""
+                <p>{greet}</p>
+                <p>{intro}</p>
                 <table class="info-table">
-                    <tr><td>Booking Number:</td><td>{booking['booking_number']}</td></tr>
-                    <tr><td>Hotel:</td><td>{hotel['name']}</td></tr>
-                    <tr><td>Planned Check-in:</td><td>{booking['check_in']}</td></tr>
+                    <tr><td>{rows[0]}:</td><td>{booking['booking_number']}</td></tr>
+                    <tr><td>{rows[1]}:</td><td>{hotel['name']}</td></tr>
+                    <tr><td>{rows[2]}:</td><td>{check_in}</td></tr>
                 </table>
-                
                 {refund_text}
-                
-                <p>We regret that you cannot attend the festival and hope to welcome you at a future event.</p>
-        """
-    
+                <p>{outro}</p>
+    """
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
     return subject, full_body
-
 
 
 def generate_arrival_reminder_email(booking: dict, hotel: dict, lang: str = "de") -> tuple:

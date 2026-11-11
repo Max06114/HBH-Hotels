@@ -1761,51 +1761,13 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
     else:
         refund_percentage = 0
     
-    refund_amount = 0
-    refund_status = "no_refund"
-    
-    # Process Stripe refund if payment was made
-    if booking.get('payment_status') in ['deposit_paid', 'fully_paid']:
-        # Find the payment transaction
-        transaction = await db.payment_transactions.find_one(
-            {"booking_id": booking_id, "status": "completed"},
-            {"_id": 0}
-        )
-        
-        if transaction and transaction.get('payment_intent_id') and refund_percentage > 0:
-            try:
-                import stripe
-                stripe.api_key = os.environ.get('STRIPE_API_KEY')
-                
-                # Calculate refund amount
-                paid_amount = transaction.get('amount', booking.get('deposit_amount', 0))
-                refund_amount = round(paid_amount * (refund_percentage / 100), 2)
-                
-                # Create refund in Stripe
-                refund = stripe.Refund.create(
-                    payment_intent=transaction['payment_intent_id'],
-                    amount=int(refund_amount * 100),  # Stripe uses cents
-                    reason='requested_by_customer'
-                )
-                
-                refund_status = "refunded" if refund.status == 'succeeded' else "refund_pending"
-                
-                # Log the refund
-                await db.refunds.insert_one({
-                    "id": str(uuid.uuid4()),
-                    "booking_id": booking_id,
-                    "transaction_id": transaction.get('id'),
-                    "refund_id": refund.id,
-                    "amount": refund_amount,
-                    "percentage": refund_percentage,
-                    "status": refund.status,
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                })
-                
-            except Exception as e:
-                logging.error(f"Stripe refund failed: {str(e)}")
-                refund_status = "refund_failed"
-    
+    if booking.get("payment_status") in ("cancelled", "abandoned", "expired", "refunded"):
+        raise HTTPException(status_code=400, detail="Booking is already inactive")
+    status_paid = {"deposit_paid": booking.get("deposit_amount", 0), "fully_paid": booking.get("total_price", 0)}
+    paid_amount = float(status_paid.get(booking.get("payment_status"), 0) or 0)
+    refund_amount = round(paid_amount * refund_percentage / 100, 2)
+    refund_status = "open" if refund_amount > 0 else "none"
+
     # Update booking status
     await db.bookings.update_one(
         {"id": booking_id},
@@ -1814,6 +1776,7 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
             "refund_amount": refund_amount,
             "refund_percentage": refund_percentage,
             "refund_status": refund_status,
+            "paid_before_cancel": paid_amount,
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
@@ -1827,8 +1790,8 @@ async def cancel_booking(booking_id: str, admin: dict = Depends(get_current_admi
     # Send cancellation email with refund info
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
     lang = booking.get("language", "de")
-    subject, body = generate_cancellation_email(booking, hotel, refund_amount, refund_percentage, lang)
-    await send_email(booking['email'], subject, body, email_type="cancellation", booking=booking)
+    subject, body = generate_cancellation_email(booking, hotel, refund_amount, refund_percentage, lang, paid_amount)
+    await send_email(booking['email'], subject, body, email_type="cancellation", booking=booking, bcc_admin=True)
     
     return {
         "message": "Booking cancelled successfully", 
@@ -2191,6 +2154,20 @@ async def admin_update_booking_status(booking_id: str, status: str, admin: dict 
             asyncio.create_task(send_email(booking["email"], subject, body, email_type="remaining_confirmation", booking=booking, bcc_admin=True))
             email_sent = True
     return {"message": "Status updated successfully", "email_sent": email_sent}
+
+@api_router.post("/admin/bookings/{booking_id}/refund-done")
+async def admin_mark_refund_done(booking_id: str, admin: dict = Depends(get_current_admin)):
+    """Admin has refunded the guest manually (PayPal or bank transfer)."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.get("refund_status") != "open":
+        raise HTTPException(status_code=400, detail="No open refund for this booking")
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {"payment_status": "refunded", "refund_status": "done", "refunded_at": now, "updated_at": now}
+    await db.bookings.update_one({"id": booking_id}, {"$set": updates})
+    await log_payment_event(booking, "refund_done", f"Erstattung {booking.get('refund_amount', 0)} € manuell als erledigt markiert")
+    return {**booking, **updates}
 
 @api_router.post("/admin/bookings/mark-abandoned")
 async def admin_mark_abandoned(admin: dict = Depends(get_current_admin)):

@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square, CalendarDays } from 'lucide-react';
+import { cancellationPreview } from './cancellation';
+import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square, CalendarDays, Undo2 } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
 import StayChangeDialog from './StayChangeDialog';
 import TransferActionDialog from './TransferActionDialog';
@@ -104,11 +105,23 @@ const BookingsManagement = () => {
     }
   };
 
+  const handleRefundDone = async (booking) => {
+    try {
+      const { data } = await axios.post(`${API}/admin/bookings/${booking.id}/refund-done`, {}, { headers: getAuthHeaders() });
+      setBookings((prev) => prev.map((b) => (b.id === data.id ? data : b)));
+      toast.success('Erstattung als erledigt markiert');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Fehler');
+    }
+  };
+
   const handleCancelBooking = async () => {
     if (!selectedBooking) return;
     try {
-      await axios.post(`${API}/bookings/${selectedBooking.id}/cancel`, {}, { headers: getAuthHeaders() });
-      toast.success(language === 'de' ? 'Buchung storniert' : 'Booking cancelled');
+      const { data } = await axios.post(`${API}/bookings/${selectedBooking.id}/cancel`, {}, { headers: getAuthHeaders() });
+      toast.success(data.refund_amount > 0
+        ? `Buchung storniert – Erstattung ${data.refund_amount.toFixed(2).replace('.', ',')} € offen`
+        : 'Buchung storniert');
       fetchBookings();
     } catch (error) {
       toast.error(language === 'de' ? 'Fehler beim Stornieren' : 'Error cancelling');
@@ -270,6 +283,11 @@ const BookingsManagement = () => {
                     <TableCell className="font-semibold">{formatPrice(booking.total_price)} €</TableCell>
                     <TableCell>
                       {getStatusBadge(booking.payment_status)}
+                      {booking.refund_status === 'open' && (
+                        <div className="text-xs text-orange-700 mt-1" data-testid={`refund-open-${booking.id}`}>
+                          Erstattung offen: {Number(booking.refund_amount || 0).toFixed(2).replace('.', ',')} €
+                        </div>
+                      )}
                       {booking.payment_status === 'transfer_pending' && booking.transfer_due_date && (
                         <p className="text-xs text-[#4A4A4A] mt-1" data-testid={`transfer-due-${booking.id}`}>
                           {language === 'de' ? 'Fällig bis ' : 'Due by '}{new Date(booking.transfer_due_date).toLocaleDateString('de-DE')}
@@ -361,7 +379,17 @@ const BookingsManagement = () => {
                             {resendingId === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                           </Button>
                         )}
-                        {!['cancelled', 'abandoned', 'expired'].includes(booking.payment_status) && (
+                        {booking.refund_status === 'open' && (
+                          <Button
+                            variant="ghost" size="sm" className="text-orange-700"
+                            onClick={() => handleRefundDone(booking)}
+                            title={language === 'de' ? 'Erstattung erledigt (Geld zurückgezahlt)' : 'Refund done'}
+                            data-testid={`refund-done-${booking.id}`}
+                          >
+                            <Undo2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {!['cancelled', 'abandoned', 'expired', 'refunded'].includes(booking.payment_status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -400,9 +428,21 @@ const BookingsManagement = () => {
               ? `Möchten Sie die Buchung ${selectedBooking?.booking_number} wirklich stornieren?`
               : `Are you sure you want to cancel booking ${selectedBooking?.booking_number}?`}
           </p>
+          {selectedBooking && (() => {
+            const p = cancellationPreview(selectedBooking);
+            const eur = (v) => `${v.toFixed(2).replace('.', ',')} €`;
+            return (
+              <div className="text-sm bg-[#F5F2EA] rounded-md p-3 space-y-1" data-testid="cancel-refund-preview">
+                <div>Gast: <strong>{selectedBooking.first_name} {selectedBooking.last_name}</strong> · Anreise in {p.days} Tagen</div>
+                <div>Bereits gezahlt: <strong>{eur(p.paid)}</strong></div>
+                <div>Erstattung laut Stornobedingungen ({p.pct} %): <strong data-testid="cancel-refund-amount">{eur(p.refund)}</strong></div>
+                <div className="text-xs text-[#4A4A4A]">Der Gast erhält eine Stornobestätigung mit diesem Betrag (Kopie an dich). Die Erstattung führst du selbst in PayPal bzw. per Überweisung durch und markierst sie danach als erledigt.</div>
+              </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>{t('cancel')}</Button>
-            <Button onClick={handleCancelBooking} className="bg-red-600 hover:bg-red-700">
+            <Button onClick={handleCancelBooking} className="bg-red-600 hover:bg-red-700" data-testid="confirm-cancel-booking">
               {language === 'de' ? 'Stornieren' : 'Cancel Booking'}
             </Button>
           </DialogFooter>
