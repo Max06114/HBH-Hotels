@@ -109,7 +109,7 @@ const BankTransferPage = () => {
                 {!paid && (
                   <div className="border border-[#6B1D2A]/30 rounded-lg p-5 mb-6" data-testid="bank-details-box">
                     <h2 className="font-semibold text-[#1A1A1A] mb-3">{de ? 'Bankverbindung' : 'Bank details'}</h2>
-                    {bank.holder && <CopyRow label={de ? 'Kontoinhaber' : 'Account holder'} value={bank.holder} testId="bank-holder" />}
+                    {bank.holder && <CopyRow label={de ? 'Empfänger (Kontoinhaber)' : 'Recipient (account holder)'} value={bank.holder} testId="bank-holder" />}
                     <CopyRow label="Bank" value={bank.bank} testId="bank-name" />
                     <CopyRow label="IBAN" value={bank.iban} strong testId="bank-iban" />
                     <CopyRow label="BIC" value={bank.bic} testId="bank-bic" />

@@ -89,7 +89,7 @@ EMAIL_PROVIDER = "resend" if RESEND_API_KEY else "smtp"
 
 # Bank transfer (same account as on the invoice PDF)
 BANK_DETAILS = {
-    "holder": os.environ.get('BANK_ACCOUNT_HOLDER', ''),
+    "holder": "Maximilian von Arnim",
     "bank": "N26 Bank",
     "iban": "DE77100110012713041577",
     "bic": "NTSBDEB1XXX",
@@ -694,7 +694,7 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     
     # Bank details
     footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#4A4A4A'), alignment=1)
-    elements.append(Paragraph(f"<b>{t['bank_label']}:</b> {BANK_DETAILS['bank']} · IBAN: {BANK_DETAILS['iban']} · BIC: {BANK_DETAILS['bic']}", footer_style))
+    elements.append(Paragraph(f"<b>{t['bank_label']}:</b> {BANK_DETAILS['holder']} · {BANK_DETAILS['bank']} · IBAN: {BANK_DETAILS['iban']} · BIC: {BANK_DETAILS['bic']}", footer_style))
     elements.append(Paragraph("Steuernummer: 110/202/40794 · Ust.Id Nr. / VAT ID No.: DE 229 059 172", footer_style))
     
     doc.build(elements)

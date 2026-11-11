@@ -375,7 +375,7 @@ def generate_payment_reminder_email(booking: dict, hotel: dict, stripe_url: str,
 def bank_details_html(bank: dict, amount: float, reference: str, lang: str = "de") -> str:
     """Reusable block with bank transfer details."""
     amount_txt = f"{format_price_de(amount)} €" if lang == "de" else f"€{amount:.2f}"
-    holder_row = f"<tr><td>{'Kontoinhaber' if lang == 'de' else 'Account holder'}:</td><td>{bank['holder']}</td></tr>" if bank.get("holder") else ""
+    holder_row = f"<tr><td>{'Empfänger (Kontoinhaber)' if lang == 'de' else 'Recipient (account holder)'}:</td><td>{bank['holder']}</td></tr>" if bank.get("holder") else ""
     labels = {
         "de": ("Bankverbindung für die Überweisung", "Bank", "Betrag", "Verwendungszweck", "Bitte geben Sie unbedingt die Buchungsnummer als Verwendungszweck an, damit wir Ihre Zahlung zuordnen können."),
         "en": ("Bank details for your transfer", "Bank", "Amount", "Payment reference", "Please always state the booking number as payment reference so we can match your payment."),

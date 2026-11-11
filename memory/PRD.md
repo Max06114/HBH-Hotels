@@ -200,7 +200,7 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
   - Public: `GET /api/payments/bank-details`, `POST /api/bookings/bank-transfer` (PayPalOrderRequest-Body, jetzt mit `language`), Seite `/booking/transfer/:bookingId` (`BankTransferPage.js`, Bankdaten mit Kopier-Buttons, Rechnungsdownload)
   - Admin: `POST /admin/bookings/{id}/convert-to-transfer {send_email}` (pending/abandoned/expired → transfer_pending), `POST /admin/bookings/{id}/transfer-received {payment_type: deposit|remaining, amount}` (→ deposit_paid + Bestätigung/Rechnung bzw. fully_paid + Bestätigung; payment_transactions mit payment_method bank_transfer). UI: `TransferActionDialog.js`, Buttons Landmark/BadgeCheck in Buchungsliste, Statusfilter erweitert
   - Scheduler `process_bank_transfers` (alle 6h): Erinnerung nach 5 Tagen (einmalig, `transfer_reminder_sent_at`), Freigabe nach 10 Tagen (E-Mail `transfer_expired`, BCC Admin)
-  - Zahlungserinnerung Restzahlung enthält jetzt zusätzlich Bankverbindung (`bank_details_html`); Bankdaten zentral in `BANK_DETAILS` (N26, auch PDF-Fußzeile); optional Env `BANK_ACCOUNT_HOLDER`
+  - Zahlungserinnerung Restzahlung enthält jetzt zusätzlich Bankverbindung (`bank_details_html`); Bankdaten zentral in `BANK_DETAILS` (N26, auch PDF-Fußzeile); Kontoinhaber fest „Maximilian von Arnim“ (Mails, Überweisungsseite, PDF)
   - BookingPage: Umschalter PayPal/Kreditkarte ↔ Überweisung (`payment-method-switch`); PayPal create-order übernimmt `language` aus Request
   - Hinweis Nutzer: Seamus soll KEINE E-Mail bekommen → Umwandeln mit Haken „E-Mail senden“ aus (falls gewünscht)
 - **2026-06 (Fork)**: Zustell-Status, E-Mail-Vorlagen aktiv, Dashboard-Kachel (testing_agent iteration_8: 100 %)
