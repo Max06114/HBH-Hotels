@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
+import MarginAnalytics from './MarginAnalytics';
 import { Loader2, TrendingUp, TrendingDown, Euro, CalendarCheck, Hotel, Users } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -327,6 +328,8 @@ const AnalyticsDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      <MarginAnalytics />
 
       {/* Monthly Comparison */}
       <Card className="border-[#E5E0D5]">

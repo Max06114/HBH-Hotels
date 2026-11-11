@@ -2808,6 +2808,50 @@ async def update_email_templates(hotel_id: str, data: dict, admin: dict = Depend
 
 # ============== ADMIN STATS ==============
 
+# Purchase prices per room/night incl. breakfast and 4% bed tax (HBH 2027 calculation sheet)
+PURCHASE_PRICES = {
+    "hey": {"single": 99.0, "double": 129.0},
+    "ankerhof": {"single": 120 * 1.04, "double": 190 * 1.04},
+    "niu": {"single": (364.91 / 3 * 1.04 + 383 / 3) / 2, "double": (439.79 / 3 * 1.04 + 458 / 3) / 2},
+    "b&b": {"single": 134 * 1.04, "double": 158 * 1.04},
+    "dorint": {"single": 115 * 1.04, "double": 145 * 1.04, "single_comfort": 130 * 1.04, "double_comfort": 160 * 1.04},
+}
+MARGIN_TAX_RATE = 19 / 119
+
+def purchase_price(hotel_name: str, room_type: str) -> Optional[float]:
+    prices = next((v for k, v in PURCHASE_PRICES.items() if k in (hotel_name or "").lower()), None)
+    if not prices:
+        return None
+    rt = (room_type or "single").replace("twin", "double")
+    return prices.get(rt) or prices.get(rt.replace("_comfort", ""))
+
+@api_router.get("/admin/analytics/margins")
+async def admin_margin_analytics(admin: dict = Depends(get_current_admin)):
+    """Margin and margin tax (§25 UStG, 19/119 of the gross margin) on paid bookings."""
+    bookings = await db.bookings.find({"payment_status": {"$in": ["deposit_paid", "fully_paid"]}}, {"_id": 0}).to_list(10000)
+    hotels, missing = {}, []
+    for b in bookings:
+        ek = purchase_price(b.get("hotel_name"), b.get("room_type"))
+        h = hotels.setdefault(b.get("hotel_id"), {"hotel_id": b.get("hotel_id"), "hotel_name": b.get("hotel_name"), "bookings": 0, "nights": 0,
+                                                  "revenue": 0.0, "purchase": 0.0, "margin": 0.0, "margin_tax": 0.0, "net_margin": 0.0})
+        if ek is None:
+            missing.append(b.get("booking_number"))
+            continue
+        nights = b.get("nights") or calculate_nights(b["check_in"], b["check_out"])
+        revenue, purchase = float(b.get("total_price") or 0), ek * nights
+        margin = revenue - purchase
+        tax = margin * MARGIN_TAX_RATE if margin > 0 else 0.0
+        h["bookings"] += 1; h["nights"] += nights; h["revenue"] += revenue; h["purchase"] += purchase
+        h["margin"] += margin; h["margin_tax"] += tax; h["net_margin"] += margin - tax
+    rows = sorted((r for r in hotels.values() if r["bookings"]), key=lambda r: -r["net_margin"])
+    keys = ("bookings", "nights", "revenue", "purchase", "margin", "margin_tax", "net_margin")
+    total = {k: sum(r[k] for r in rows) for k in keys}
+    for r in rows + [total]:
+        r["margin_pct"] = round(r["margin"] / r["revenue"] * 100, 1) if r["revenue"] else 0.0
+        for k in ("revenue", "purchase", "margin", "margin_tax", "net_margin"):
+            r[k] = round(r[k], 2)
+    return {"hotels": rows, "total": total, "missing_purchase_price": missing}
+
 @api_router.get("/admin/stats")
 async def admin_get_stats(admin: dict = Depends(get_current_admin)):
     total_bookings = await db.bookings.count_documents({})
