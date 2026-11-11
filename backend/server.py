@@ -58,7 +58,8 @@ from services import (
     generate_arrival_reminder_email,
     get_email_header,
     get_email_footer,
-    generate_stay_change_email
+    generate_stay_change_email,
+    generate_partial_payment_email
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -1564,6 +1565,55 @@ async def admin_transfer_received(booking_id: str, data: TransferReceivedRequest
         raise HTTPException(status_code=400, detail="payment_type must be 'deposit' or 'remaining'")
     updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     return {"message": "Payment recorded", "booking": updated}
+
+class PaymentEntryRequest(BaseModel):
+    mode: str = "add"
+    amount: float
+    payment_method: str = "bank_transfer"
+    send_email: bool = True
+
+@api_router.post("/admin/bookings/{booking_id}/payments")
+async def admin_record_payment(booking_id: str, data: PaymentEntryRequest, admin: dict = Depends(get_current_admin)):
+    """Add a (partial) payment or correct the total amount received; status follows the balance."""
+    booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking["payment_status"] not in ("deposit_paid", "fully_paid"):
+        raise HTTPException(status_code=400, detail="Zahlungen können nur bei angezahlten oder bezahlten Buchungen erfasst werden")
+    if data.mode not in ("add", "set") or data.payment_method not in ("bank_transfer", "paypal", "cash"):
+        raise HTTPException(status_code=400, detail="Ungültige Angaben")
+    total = round(booking["total_price"], 2)
+    paid_old = total if booking["payment_status"] == "fully_paid" else round(booking["deposit_amount"], 2)
+    paid_new = round(paid_old + data.amount if data.mode == "add" else data.amount, 2)
+    if (data.mode == "add" and data.amount <= 0) or paid_new <= 0 or paid_new > total + 0.005:
+        raise HTTPException(status_code=400, detail=f"Betrag ungültig – erhalten insgesamt muss zwischen 0 und {total:.2f} € liegen")
+    remaining = round(total - paid_new, 2)
+    status = "fully_paid" if remaining <= 0.005 else "deposit_paid"
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {"deposit_amount": paid_new, "remaining_amount": max(remaining, 0.0), "payment_status": status, "updated_at": now,
+               "fully_paid_at": now if status == "fully_paid" else None}
+    await db.bookings.update_one({"id": booking_id}, {"$set": updates})
+    delta = round(paid_new - paid_old, 2)
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()), "booking_id": booking_id, "payment_method": data.payment_method,
+        "payment_type": "partial" if data.mode == "add" else "correction", "amount": delta, "status": "completed",
+        "recorded_by": admin.get("email"), "created_at": now})
+    label = f"Teilzahlung {data.amount:.2f} € erfasst" if data.mode == "add" else f"Erhaltenen Betrag korrigiert: {paid_old:.2f} € → {paid_new:.2f} €"
+    await log_payment_event(booking, "capture_completed" if data.mode == "add" else "payment_corrected", f"{label}, offen {max(remaining, 0):.2f} €")
+    booking.update(updates)
+    email_sent = False
+    if data.mode == "add" and data.send_email:
+        hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
+        lang = booking.get("language", "de")
+        if status == "fully_paid":
+            subject, body = generate_remaining_payment_confirmation_email({**booking, "remaining_amount": data.amount}, hotel, data.payment_method, lang)
+            email_type = "remaining_confirmation"
+        else:
+            subject, body = generate_partial_payment_email(booking, hotel, data.amount, data.payment_method, BANK_DETAILS, lang)
+            email_type = "partial_payment_receipt"
+        asyncio.create_task(send_email(booking["email"], subject, body, email_type=email_type, booking=booking, bcc_admin=True))
+        email_sent = True
+    return {"booking": booking, "email_sent": email_sent}
 
 @api_router.post("/payments/paypal/event")
 async def paypal_client_event(data: PayPalEventRequest):

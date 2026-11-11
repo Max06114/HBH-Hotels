@@ -12,6 +12,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { cancellationPreview } from './cancellation';
 import { TipButton } from './TipButton';
+import PaymentsDialog from './PaymentsDialog';
 import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square, CalendarDays, Undo2 } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
 import StayChangeDialog from './StayChangeDialog';
@@ -44,6 +45,7 @@ const BookingsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [paymentsBooking, setPaymentsBooking] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [resendingId, setResendingId] = useState(null);
   const [editingBooking, setEditingBooking] = useState(null);
@@ -336,11 +338,11 @@ const BookingsManagement = () => {
                             <BadgeCheck className="w-4 h-4" />
                           </TipButton>
                         )}
-                        {booking.payment_status === 'deposit_paid' && (
+                        {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
                           <TipButton
                             variant="ghost" size="sm" className="text-green-700"
-                            onClick={() => setTransferAction({ booking, type: 'remaining' })}
-                            title={language === 'de' ? 'Restzahlung per Überweisung erhalten' : 'Remaining balance received by transfer'}
+                            onClick={() => setPaymentsBooking(booking)}
+                            title={language === 'de' ? 'Zahlungen: Teilzahlung erfassen oder Betrag korrigieren' : 'Payments: record or correct'}
                             data-testid={`remaining-received-${booking.id}`}
                           >
                             <Landmark className="w-4 h-4" />
@@ -451,6 +453,15 @@ const BookingsManagement = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PaymentsDialog
+        booking={paymentsBooking}
+        getAuthHeaders={getAuthHeaders}
+        onClose={() => setPaymentsBooking(null)}
+        onDone={(updated) => {
+          setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+          setPaymentsBooking(null);
+        }}
+      />
       <TransferActionDialog
         action={transferAction}
         language={language}

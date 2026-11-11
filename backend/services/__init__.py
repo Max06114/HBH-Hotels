@@ -555,6 +555,39 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
     return subject, full_body
 
 
+def generate_partial_payment_email(booking: dict, hotel: dict, amount: float, payment_method: str, bank: dict, lang: str = "de") -> tuple:
+    """Receipt for a partial payment with the remaining open balance."""
+    de = lang == "de"
+    fmt = (lambda v: f"{format_price_de(v)} €") if de else (lambda v: f"€{v:,.2f}")
+    paid_total = round(booking["total_price"] - booking["remaining_amount"], 2)
+    method = ({"bank_transfer": "Überweisung", "cash": "Barzahlung"} if de else {"bank_transfer": "bank transfer", "cash": "cash"}).get(payment_method, "PayPal")
+    rows = [("Buchungsnummer", "Booking Number", booking["booking_number"]), ("Hotel", "Hotel", hotel["name"]),
+            ("Gesamtbetrag", "Total amount", fmt(booking["total_price"])), ("Bisher erhalten", "Received so far", fmt(paid_total)),
+            ("Noch offen", "Outstanding balance", f"<strong>{fmt(booking['remaining_amount'])}</strong>")]
+    table = "".join(f"<tr><td>{d if de else e}:</td><td>{v}</td></tr>" for d, e, v in rows)
+    if de:
+        title, subject = "Zahlung erhalten", f"Zahlungseingang - {booking['booking_number']}"
+        greet, intro = f"Sehr geehrte(r) {greeting_name(booking, 'de')},", "vielen Dank, wir haben Ihre Zahlung erhalten."
+        outro = "Den offenen Restbetrag überweisen Sie bitte bis spätestens 6 Wochen vor Anreise auf folgendes Konto:"
+    else:
+        title, subject = "Payment Received", f"Payment received - {booking['booking_number']}"
+        greet, intro = f"Dear {greeting_name(booking, 'en')},", "Thank you, we have received your payment."
+        outro = "Please transfer the outstanding balance no later than 6 weeks before arrival to the following account:"
+    body = f"""
+                <p>{greet}</p>
+                <p>{intro}</p>
+                <div class="amount-box">
+                    <div>{"Erhaltene Zahlung" if de else "Payment received"}</div>
+                    <div class="amount">{fmt(amount)} ✓</div>
+                    <div style="font-size: 12px; margin-top: 5px;">via {method}</div>
+                </div>
+                <table class="info-table">{table}</table>
+                <p>{outro}</p>
+                {bank_details_html(bank, booking["remaining_amount"], booking["booking_number"], lang)}
+    """
+    return subject, get_email_header(title, lang) + body + get_email_footer(lang)
+
+
 def generate_arrival_reminder_email(booking: dict, hotel: dict, lang: str = "de") -> tuple:
     """Generate arrival reminder email (1 week before check-in)."""
     
