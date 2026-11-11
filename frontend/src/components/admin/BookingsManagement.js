@@ -11,6 +11,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { cancellationPreview } from './cancellation';
+import { TipButton } from './TipButton';
 import { Download, Ban, Loader2, Mail, Search, Pencil, Landmark, BadgeCheck, CheckSquare, Square, CalendarDays, Undo2 } from 'lucide-react';
 import BookingEditDialog from './BookingEditDialog';
 import StayChangeDialog from './StayChangeDialog';
@@ -306,45 +307,46 @@ const BookingsManagement = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
+                        <TipButton
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDownloadInvoice(booking.id, booking.invoice_number)}
+                          title={language === 'de' ? 'Rechnung herunterladen (PDF)' : 'Download invoice (PDF)'}
                           data-testid={`download-invoice-${booking.id}`}
                         >
                           <Download className="w-4 h-4" />
-                        </Button>
+                        </TipButton>
                         {['pending', 'abandoned', 'expired'].includes(booking.payment_status) && (
-                          <Button
+                          <TipButton
                             variant="ghost" size="sm" className="text-orange-700"
                             onClick={() => setTransferAction({ booking, type: 'convert' })}
                             title={language === 'de' ? 'In Überweisungs-Reservierung umwandeln' : 'Convert to bank transfer reservation'}
                             data-testid={`convert-transfer-${booking.id}`}
                           >
                             <Landmark className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
                         {booking.payment_status === 'transfer_pending' && (
-                          <Button
+                          <TipButton
                             variant="ghost" size="sm" className="text-green-700"
                             onClick={() => setTransferAction({ booking, type: 'deposit' })}
                             title={language === 'de' ? 'Anzahlung erhalten' : 'Deposit received'}
                             data-testid={`transfer-received-${booking.id}`}
                           >
                             <BadgeCheck className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
                         {booking.payment_status === 'deposit_paid' && (
-                          <Button
+                          <TipButton
                             variant="ghost" size="sm" className="text-green-700"
                             onClick={() => setTransferAction({ booking, type: 'remaining' })}
                             title={language === 'de' ? 'Restzahlung per Überweisung erhalten' : 'Remaining balance received by transfer'}
                             data-testid={`remaining-received-${booking.id}`}
                           >
                             <Landmark className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
-                        <Button
+                        <TipButton
                           variant="ghost"
                           size="sm"
                           onClick={() => setEditingBooking(booking)}
@@ -352,9 +354,9 @@ const BookingsManagement = () => {
                           data-testid={`edit-booking-${booking.id}`}
                         >
                           <Pencil className="w-4 h-4" />
-                        </Button>
+                        </TipButton>
                         {['deposit_paid', 'fully_paid'].includes(booking.payment_status) && (
-                          <Button
+                          <TipButton
                             variant="ghost"
                             size="sm"
                             onClick={() => setStayBooking(booking)}
@@ -362,10 +364,10 @@ const BookingsManagement = () => {
                             data-testid={`change-stay-${booking.id}`}
                           >
                             <CalendarDays className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
                         {['deposit_paid', 'fully_paid', 'transfer_pending'].includes(booking.payment_status) && (
-                          <Button
+                          <TipButton
                             variant="ghost"
                             size="sm"
                             onClick={() => handleResendConfirmation(booking)}
@@ -377,28 +379,29 @@ const BookingsManagement = () => {
                             data-testid={`resend-confirmation-${booking.id}`}
                           >
                             {resendingId === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                          </Button>
+                          </TipButton>
                         )}
                         {booking.refund_status === 'open' && (
-                          <Button
+                          <TipButton
                             variant="ghost" size="sm" className="text-orange-700"
                             onClick={() => handleRefundDone(booking)}
                             title={language === 'de' ? 'Erstattung erledigt (Geld zurückgezahlt)' : 'Refund done'}
                             data-testid={`refund-done-${booking.id}`}
                           >
                             <Undo2 className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
                         {!['cancelled', 'abandoned', 'expired', 'refunded'].includes(booking.payment_status) && (
-                          <Button
+                          <TipButton
                             variant="ghost"
                             size="sm"
                             onClick={() => { setSelectedBooking(booking); setCancelDialogOpen(true); }}
+                            title={language === 'de' ? 'Buchung stornieren' : 'Cancel booking'}
                             className="text-red-600 hover:text-red-700"
                             data-testid={`cancel-booking-${booking.id}`}
                           >
                             <Ban className="w-4 h-4" />
-                          </Button>
+                          </TipButton>
                         )}
                       </div>
                     </TableCell>
