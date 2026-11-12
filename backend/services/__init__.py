@@ -532,13 +532,11 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
         title = "Stornierungsbestätigung"
         subject = f"Stornierungsbestätigung - {booking['booking_number']}"
         intro, rows = "hiermit bestätigen wir die Stornierung Ihrer Buchung.", ("Buchungsnummer", "Hotel", "Geplante Anreise")
-        outro = "Wir bedauern, dass Sie nicht am Festival teilnehmen können, und hoffen, Sie bei einer zukünftigen Veranstaltung begrüßen zu dürfen."
         greet = f"Sehr geehrte(r) {greeting_name(booking, 'de')},"
     else:
         title = "Cancellation Confirmation"
         subject = f"Cancellation Confirmation - {booking['booking_number']}"
         intro, rows = "We hereby confirm the cancellation of your booking.", ("Booking Number", "Hotel", "Planned Check-in")
-        outro = "We regret that you cannot attend the festival and hope to welcome you at a future event."
         greet = f"Dear {greeting_name(booking, 'en')},"
     body = f"""
                 <p>{greet}</p>
@@ -549,7 +547,6 @@ def generate_cancellation_email(booking: dict, hotel: dict, refund_amount: float
                     <tr><td>{rows[2]}:</td><td>{check_in}</td></tr>
                 </table>
                 {refund_text}
-                <p>{outro}</p>
     """
     full_body = get_email_header(title, lang) + body + get_email_footer(lang)
     return subject, full_body
