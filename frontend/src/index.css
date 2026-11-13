@@ -6,15 +6,12 @@
 @tailwind utilities;
 
 :root {
-  --primary: #6B1D2A;
   --primary-hover: #8A2536;
-  --secondary: #D4AF37;
   --background-base: #FDFBF7;
   --background-alt: #F5F2EA;
   --surface: #FFFFFF;
   --text-main: #1A1A1A;
   --text-muted: #4A4A4A;
-  --border: #E5E0D5;
   --admin-sidebar: #1A1A1A;
   --admin-sidebar-text: #FDFBF7;
   --error: #D93025;
@@ -79,7 +76,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: hsl(var(--border));
   border-radius: 4px;
 }
 
@@ -89,7 +86,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid hsl(var(--primary));
   outline-offset: 2px;
 }
 
