@@ -168,6 +168,24 @@ def generate_booking_confirmation_email(booking: dict, hotel: dict, lang: str = 
     return subject, full_body
 
 
+ROOM_LABELS = {
+    "de": {"single": "Einzelzimmer", "double": "Doppelzimmer", "twin": "Zweibettzimmer", "single_comfort": "Einzelzimmer Comfort",
+           "double_comfort": "Doppelzimmer Comfort", "twin_comfort": "Zweibettzimmer Comfort"},
+    "en": {"single": "Single Room", "double": "Double Room", "twin": "Twin Room", "single_comfort": "Single Room Comfort",
+           "double_comfort": "Double Room Comfort", "twin_comfort": "Twin Room Comfort"},
+}
+
+
+def _room_change_rows(booking: dict, old: dict, lang: str) -> str:
+    labels = ROOM_LABELS["de" if lang == "de" else "en"]
+    new_rt, old_rt = labels.get(booking["room_type"], booking["room_type"]), labels.get(old.get("room_type") or booking["room_type"], "")
+    room = f"{old_rt} → <strong>{new_rt}</strong>" if old_rt != new_rt else new_rt
+    rows = f"<tr><td>{'Zimmertyp' if lang == 'de' else 'Room Type'}:</td><td>{room}</td></tr>"
+    if booking.get("companion_name"):
+        rows += f"<tr><td>{'Mitreisende(r)' if lang == 'de' else 'Fellow traveller'}:</td><td>{booking['companion_name']}</td></tr>"
+    return rows
+
+
 def generate_stay_change_email(booking: dict, old: dict, hotel: dict, lang: str, invoice_link: str, paid: float, refund_due: float = 0.0) -> tuple:
     """Rebooking confirmation after the admin changed arrival/departure dates."""
     fmt_date = lambda d: datetime.strptime(d, "%Y-%m-%d").strftime("%d.%m.%Y") if d else ""
@@ -183,12 +201,12 @@ def generate_stay_change_email(booking: dict, old: dict, hotel: dict, lang: str,
             payment_note = "<p>Ihre Buchung ist weiterhin <strong>vollständig bezahlt</strong>.</p>"
         body = f"""
                 <p>Sehr geehrte(r) {greeting_name(booking, 'de')},</p>
-                <p>wie gewünscht haben wir Ihren Aufenthalt im <strong>{hotel['name']}</strong> geändert. Hier die aktualisierten Daten:</p>
+                <p>wie gewünscht haben wir Ihre Buchung im <strong>{hotel['name']}</strong> geändert. Hier die aktualisierten Daten:</p>
                 <div class="highlight-box"><strong>Buchungsnummer: {booking['booking_number']}</strong></div>
                 <table class="info-table">
                     <tr><td>Bisher:</td><td>{fmt_date(old['check_in'])} – {fmt_date(old['check_out'])} ({old['nights']} Nächte)</td></tr>
                     <tr><td><strong>Neu:</strong></td><td><strong>{fmt_date(booking['check_in'])} – {fmt_date(booking['check_out'])} ({booking['nights']} Nächte)</strong></td></tr>
-                    <tr><td>Zimmertyp:</td><td>{booking.get('room_type_display', booking.get('room_type', ''))}</td></tr>
+                    {_room_change_rows(booking, old, 'de')}
                     <tr><td>Neuer Gesamtpreis:</td><td><strong>{format_price_de(booking['total_price'])} €</strong> (bisher {format_price_de(old['total_price'])} €)</td></tr>
                     <tr><td>Bereits bezahlt:</td><td>{format_price_de(paid)} €</td></tr>
                     <tr><td>Restbetrag:</td><td><strong>{format_price_de(remaining)} €</strong></td></tr>
@@ -209,12 +227,12 @@ def generate_stay_change_email(booking: dict, old: dict, hotel: dict, lang: str,
             payment_note = "<p>Your booking remains <strong>fully paid</strong>.</p>"
         body = f"""
                 <p>Dear {greeting_name(booking, 'en')},</p>
-                <p>As requested, we have changed your stay at <strong>{hotel.get('name_en', hotel['name'])}</strong>. Here are the updated details:</p>
+                <p>As requested, we have changed your booking at <strong>{hotel.get('name_en', hotel['name'])}</strong>. Here are the updated details:</p>
                 <div class="highlight-box"><strong>Booking Number: {booking['booking_number']}</strong></div>
                 <table class="info-table">
                     <tr><td>Previously:</td><td>{fmt_date(old['check_in'])} – {fmt_date(old['check_out'])} ({old['nights']} nights)</td></tr>
                     <tr><td><strong>New:</strong></td><td><strong>{fmt_date(booking['check_in'])} – {fmt_date(booking['check_out'])} ({booking['nights']} nights)</strong></td></tr>
-                    <tr><td>Room Type:</td><td>{booking.get('room_type_display', booking.get('room_type', ''))}</td></tr>
+                    {_room_change_rows(booking, old, 'en')}
                     <tr><td>New Total Price:</td><td><strong>€{booking['total_price']:.2f}</strong> (previously €{old['total_price']:.2f})</td></tr>
                     <tr><td>Already paid:</td><td>€{paid:.2f}</td></tr>
                     <tr><td>Remaining Balance:</td><td><strong>€{remaining:.2f}</strong></td></tr>

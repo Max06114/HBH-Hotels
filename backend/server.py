@@ -622,7 +622,7 @@ def generate_invoice_pdf(booking: dict, hotel: dict, language: str = "de") -> by
     # Details table with alternating colors
     details_data = [
         [t['hotel'], hotel_name],
-        [t['room_type'], room_type_display],
+        [t['room_type'], room_type_display + (f" ({'Mitreisende(r)' if language == 'de' else 'Fellow traveller'}: {booking['companion_name']})" if booking.get('companion_name') else "")],
         [t['check_in'], booking['check_in']],
         [t['check_out'], booking['check_out']],
         [t['nights'], str(booking['nights'])],
@@ -2261,15 +2261,21 @@ async def admin_update_booking_guest(booking_id: str, data: BookingGuestUpdate, 
     updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     return {"message": "Booking updated", "booking": updated, "changes": changes}
 
-def _stay_change_calc(booking: dict, hotel: dict, check_in: str, check_out: str) -> dict:
-    """New totals for changed dates; already paid money stays, remaining = new total - paid."""
+ROOM_PRICE_FIELDS = {"single": "single_price", "double": "double_price", "twin": "twin_price",
+                     "single_comfort": "single_comfort_price", "double_comfort": "double_comfort_price", "twin_comfort": "twin_comfort_price"}
+
+def _stay_change_calc(booking: dict, hotel: dict, check_in: str, check_out: str, room_type: Optional[str] = None) -> dict:
+    """New totals for changed dates/room; already paid money stays, remaining = new total - paid."""
+    room_type = room_type or booking["room_type"]
+    if room_type != booking["room_type"] and not hotel.get(ROOM_PRICE_FIELDS.get(room_type, "-")):
+        raise HTTPException(status_code=400, detail="Dieser Zimmertyp wird im Hotel nicht angeboten")
     try:
         nights = calculate_nights(check_in, check_out)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format (YYYY-MM-DD)")
     if nights <= 0:
         raise HTTPException(status_code=400, detail="Check-out must be after check-in")
-    price_per_night = get_room_price(hotel, booking["room_type"])
+    price_per_night = get_room_price(hotel, room_type)
     total_price = round(price_per_night * nights, 2)
     status = booking["payment_status"]
     if status == "fully_paid":
@@ -2287,7 +2293,7 @@ def _stay_change_calc(booking: dict, hotel: dict, check_in: str, check_out: str)
         remaining_amount = round(total_price - deposit_amount, 2)
         new_status = status
     return {
-        "check_in": check_in, "check_out": check_out, "nights": nights, "price_per_night": price_per_night,
+        "check_in": check_in, "check_out": check_out, "nights": nights, "price_per_night": price_per_night, "room_type": room_type,
         "total_price": total_price, "paid": paid, "deposit_amount": deposit_amount,
         "remaining_amount": max(remaining_amount, 0.0), "refund_due": round(-remaining_amount, 2) if remaining_amount < 0 else 0.0,
         "payment_status": new_status,
@@ -2298,17 +2304,19 @@ STAY_CHANGEABLE = ("deposit_paid", "fully_paid")
 class StayChangeIn(BaseModel):
     check_in: str
     check_out: str
+    room_type: Optional[str] = None
+    companion_name: Optional[str] = None
     send_email: bool = True
 
 @api_router.get("/admin/bookings/{booking_id}/stay-preview")
-async def admin_stay_preview(booking_id: str, check_in: str, check_out: str, admin: dict = Depends(get_current_admin)):
+async def admin_stay_preview(booking_id: str, check_in: str, check_out: str, room_type: Optional[str] = None, admin: dict = Depends(get_current_admin)):
     booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
-    return _stay_change_calc(booking, hotel, check_in, check_out)
+    return _stay_change_calc(booking, hotel, check_in, check_out, room_type)
 
 @api_router.post("/admin/bookings/{booking_id}/change-stay")
 async def admin_change_stay(booking_id: str, data: StayChangeIn, admin: dict = Depends(get_current_admin)):
@@ -2321,25 +2329,32 @@ async def admin_change_stay(booking_id: str, data: StayChangeIn, admin: dict = D
     hotel = await db.hotels.find_one({"id": booking["hotel_id"]}, {"_id": 0})
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
-    if data.check_in == booking["check_in"] and data.check_out == booking["check_out"]:
-        raise HTTPException(status_code=400, detail="Dates are unchanged")
-    calc = _stay_change_calc(booking, hotel, data.check_in, data.check_out)
+    room_type = data.room_type or booking["room_type"]
+    companion = (data.companion_name if data.companion_name is not None else booking.get("companion_name") or "").strip()
+    if data.check_in == booking["check_in"] and data.check_out == booking["check_out"] and room_type == booking["room_type"] and companion == (booking.get("companion_name") or ""):
+        raise HTTPException(status_code=400, detail="Nichts geändert")
+    calc = _stay_change_calc(booking, hotel, data.check_in, data.check_out, room_type)
+    old_key, new_key = get_inventory_key_for_room_type(hotel, booking["room_type"]), get_inventory_key_for_room_type(hotel, room_type)
+    if old_key != new_key and hotel.get("inventory"):
+        if not await decrement_inventory(hotel["id"], room_type):
+            raise HTTPException(status_code=409, detail="Für den neuen Zimmertyp ist im Kontingent kein Zimmer mehr frei – bitte Kontingent unter Inventar erhöhen")
+        await increment_inventory(hotel["id"], booking["room_type"])
     now = datetime.now(timezone.utc).isoformat()
-    old = {k: booking.get(k) for k in ("check_in", "check_out", "nights", "total_price", "deposit_amount", "remaining_amount", "payment_status")}
+    old = {k: booking.get(k) for k in ("check_in", "check_out", "nights", "total_price", "deposit_amount", "remaining_amount", "payment_status", "room_type", "companion_name")}
     updates = {
         "check_in": calc["check_in"], "check_out": calc["check_out"], "nights": calc["nights"], "price_per_night": calc["price_per_night"],
         "total_price": calc["total_price"], "deposit_amount": calc["deposit_amount"], "remaining_amount": calc["remaining_amount"],
         "payment_status": calc["payment_status"], "invoice_corrected_at": now, "updated_at": now,
-        "reminder_sent": False, "arrival_reminder_sent": False,
+        "reminder_sent": False, "arrival_reminder_sent": False, "room_type": room_type, "companion_name": companion or None,
     }
     if calc["payment_status"] == "fully_paid" and old["payment_status"] != "fully_paid":
         updates["fully_paid_at"] = now
     await db.bookings.update_one(
         {"id": booking_id},
-        {"$set": updates, "$push": {"edit_history": {"at": now, "by": admin.get("email"), "type": "stay_change", "changes": {k: {"from": old[k], "to": updates[k]} for k in old if old[k] != updates[k]}}}}
+        {"$set": updates, "$unset": {"room_type_display": ""}, "$push": {"edit_history": {"at": now, "by": admin.get("email"), "type": "stay_change", "changes": {k: {"from": old[k], "to": updates[k]} for k in old if old[k] != updates[k]}}}}
     )
     updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
-    await log_payment_event(updated, "stay_changed", f"Aufenthalt geändert {old['check_in']}–{old['check_out']} → {calc['check_in']}–{calc['check_out']}, neuer Gesamtpreis {calc['total_price']:.2f} €, Rest {calc['remaining_amount']:.2f} €")
+    await log_payment_event(updated, "stay_changed", f"Buchung geändert {old['check_in']}–{old['check_out']} {old['room_type']} → {calc['check_in']}–{calc['check_out']} {room_type}{' + ' + companion if companion else ''}, neuer Gesamtpreis {calc['total_price']:.2f} €, Rest {calc['remaining_amount']:.2f} €")
     email_sent = False
     if data.send_email:
         lang = updated.get("language", "de")

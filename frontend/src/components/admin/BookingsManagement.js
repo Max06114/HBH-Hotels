@@ -362,7 +362,7 @@ const BookingsManagement = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => setStayBooking(booking)}
-                            title={language === 'de' ? 'Aufenthalt ändern (An-/Abreise)' : 'Change stay (dates)'}
+                            title={language === 'de' ? 'Aufenthalt / Zimmer ändern' : 'Change stay (dates)'}
                             data-testid={`change-stay-${booking.id}`}
                           >
                             <CalendarDays className="w-4 h-4" />

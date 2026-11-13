@@ -10,36 +10,46 @@ import { Loader2, CalendarDays } from 'lucide-react';
 import { API } from './utils';
 
 const eur = (v) => `${(v ?? 0).toFixed(2).replace('.', ',')} €`;
+const ROOMS = [['single', 'EZ – Einzelzimmer'], ['double', 'DZ – Doppelzimmer'], ['twin', 'Twin – Zweibettzimmer'],
+  ['single_comfort', 'EZ Comfort'], ['double_comfort', 'DZ Comfort'], ['twin_comfort', 'Twin Comfort']];
 
 const StayChangeDialog = ({ booking, language, getAuthHeaders, onClose, onSaved }) => {
   const de = language === 'de';
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
+  const [roomType, setRoomType] = useState('');
+  const [companion, setCompanion] = useState('');
+  const [hotel, setHotel] = useState(null);
   const [sendEmail, setSendEmail] = useState(true);
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (booking) { setCheckIn(booking.check_in); setCheckOut(booking.check_out); setSendEmail(true); setPreview(null); setPreviewError(''); }
+    if (!booking) return;
+    setCheckIn(booking.check_in); setCheckOut(booking.check_out); setRoomType(booking.room_type); setCompanion(booking.companion_name || '');
+    setSendEmail(true); setPreview(null); setPreviewError('');
+    axios.get(`${API}/hotels`).then((r) => setHotel(r.data.find((h) => h.id === booking.hotel_id) || null)).catch(() => setHotel(null));
   }, [booking]);
 
-  const unchanged = booking && checkIn === booking.check_in && checkOut === booking.check_out;
+  const roomOptions = ROOMS.filter(([k]) => k === booking?.room_type || hotel?.[`${k}_price`]);
+  const companionChanged = booking && companion.trim() !== (booking.companion_name || '');
+  const unchanged = booking && checkIn === booking.check_in && checkOut === booking.check_out && roomType === booking.room_type;
 
   useEffect(() => {
-    if (!booking || !checkIn || !checkOut || unchanged) { setPreview(null); setPreviewError(''); return; }
+    if (!booking || !checkIn || !checkOut || (unchanged && !companionChanged)) { setPreview(null); setPreviewError(''); return; }
     let active = true;
-    axios.get(`${API}/admin/bookings/${booking.id}/stay-preview`, { params: { check_in: checkIn, check_out: checkOut }, headers: getAuthHeaders() })
+    axios.get(`${API}/admin/bookings/${booking.id}/stay-preview`, { params: { check_in: checkIn, check_out: checkOut, room_type: roomType }, headers: getAuthHeaders() })
       .then((res) => { if (active) { setPreview(res.data); setPreviewError(''); } })
       .catch((e) => { if (active) { setPreview(null); setPreviewError(e.response?.data?.detail || e.message); } });
     return () => { active = false; };
-  }, [booking, checkIn, checkOut, unchanged, getAuthHeaders]);
+  }, [booking, checkIn, checkOut, roomType, unchanged, companionChanged, getAuthHeaders]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await axios.post(`${API}/admin/bookings/${booking.id}/change-stay`, { check_in: checkIn, check_out: checkOut, send_email: sendEmail }, { headers: getAuthHeaders() });
-      toast.success(de ? `Aufenthalt geändert${res.data.email_sent ? ' – E-Mail an Gast gesendet' : ''}` : `Stay changed${res.data.email_sent ? ' – email sent to guest' : ''}`);
+      const res = await axios.post(`${API}/admin/bookings/${booking.id}/change-stay`, { check_in: checkIn, check_out: checkOut, room_type: roomType, companion_name: companion.trim(), send_email: sendEmail }, { headers: getAuthHeaders() });
+      toast.success(de ? `Buchung geändert${res.data.email_sent ? ' – E-Mail an Gast gesendet' : ''}` : `Stay changed${res.data.email_sent ? ' – email sent to guest' : ''}`);
       onSaved(res.data.booking);
     } catch (error) {
       const detail = error.response?.data?.detail;
@@ -56,7 +66,7 @@ const StayChangeDialog = ({ booking, language, getAuthHeaders, onClose, onSaved 
         <DialogHeader>
           <DialogTitle className="font-serif flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-[#6B1D2A]" />
-            {de ? 'Aufenthalt ändern' : 'Change stay'} · <span className="font-mono text-sm">{booking.booking_number}</span>
+            {de ? 'Aufenthalt / Zimmer ändern' : 'Change stay / room'} · <span className="font-mono text-sm">{booking.booking_number}</span>
           </DialogTitle>
           <DialogDescription>
             {booking.first_name} {booking.last_name} · {booking.hotel_name} · {de ? 'bisher' : 'currently'} {booking.check_in} – {booking.check_out} ({booking.nights} {de ? 'Nächte' : 'nights'}, {eur(booking.total_price)})
@@ -70,6 +80,19 @@ const StayChangeDialog = ({ booking, language, getAuthHeaders, onClose, onSaved 
           <div>
             <Label htmlFor="stay-check-out">{de ? 'Neue Abreise' : 'New check-out'}</Label>
             <Input id="stay-check-out" type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} data-testid="stay-check-out" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="stay-room-type">{de ? 'Zimmertyp' : 'Room type'}</Label>
+            <select id="stay-room-type" value={roomType} onChange={(e) => setRoomType(e.target.value)} data-testid="stay-room-type"
+              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+              {roomOptions.map(([k, l]) => <option key={k} value={k}>{l}{hotel?.[`${k}_price`] ? ` (${eur(hotel[`${k}_price`])} / Nacht)` : ''}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="stay-companion">{de ? 'Mitreisende(r) (optional)' : 'Fellow traveller (optional)'}</Label>
+            <Input id="stay-companion" value={companion} onChange={(e) => setCompanion(e.target.value)} placeholder="z. B. Mr Christopher Connor" data-testid="stay-companion" />
           </div>
         </div>
         {previewError && <p className="text-sm text-red-700" data-testid="stay-preview-error">{previewError}</p>}
@@ -91,14 +114,14 @@ const StayChangeDialog = ({ booking, language, getAuthHeaders, onClose, onSaved 
         </label>
         <p className="text-xs text-[#4A4A4A]">
           {de
-            ? 'Bitte vorher mit dem Hotel klären, ob die neuen Nächte verfügbar sind. Die Rechnung wird mit gleicher Nummer und Korrekturvermerk neu erzeugt; Erinnerungen richten sich nach dem neuen Anreisedatum.'
+            ? 'Bitte vorher mit dem Hotel klären, ob die neuen Nächte bzw. der Zimmertyp verfügbar sind. Das Kontingent wird automatisch umgebucht. Die Rechnung wird mit gleicher Nummer und Korrekturvermerk neu erzeugt; Erinnerungen richten sich nach dem neuen Anreisedatum.'
             : 'Please confirm availability of the new nights with the hotel first. The invoice is regenerated with the same number and a correction note; reminders follow the new arrival date.'}
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} data-testid="stay-cancel-btn">{de ? 'Abbrechen' : 'Cancel'}</Button>
           <Button onClick={handleSave} disabled={saving || !preview} className="bg-[#6B1D2A] hover:bg-[#8A2536] text-white" data-testid="stay-save-btn">
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {de ? 'Umbuchen' : 'Change stay'}
+            {de ? 'Umbuchen' : 'Change booking'}
           </Button>
         </DialogFooter>
       </DialogContent>
