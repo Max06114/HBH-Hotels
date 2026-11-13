@@ -9,7 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Loader2, CalendarDays } from 'lucide-react';
 import { API } from './utils';
 
-const eur = (v) => `${(v ?? 0).toFixed(2).replace('.', ',')} €`;
+const eur = (v) => `${Number(v ?? 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 const ROOMS = [['single', 'EZ – Einzelzimmer'], ['double', 'DZ – Doppelzimmer'], ['twin', 'Twin – Zweibettzimmer'],
   ['single_comfort', 'EZ Comfort'], ['double_comfort', 'DZ Comfort'], ['twin_comfort', 'Twin Comfort']];
 

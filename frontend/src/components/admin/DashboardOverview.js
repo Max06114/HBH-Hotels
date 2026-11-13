@@ -12,7 +12,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // German price format helper
 const formatPrice = (price) => {
   if (price === null || price === undefined) return '0,00';
-  return price.toFixed(2).replace('.', ',');
+  return Number(price).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const DashboardOverview = () => {

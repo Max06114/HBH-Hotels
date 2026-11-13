@@ -23,7 +23,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const formatPrice = (price) => {
   if (price === null || price === undefined) return '0,00';
-  return price.toFixed(2).replace('.', ',');
+  return Number(price).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const STATUS_OPTIONS = [
@@ -123,7 +123,7 @@ const BookingsManagement = () => {
     try {
       const { data } = await axios.post(`${API}/bookings/${selectedBooking.id}/cancel`, {}, { headers: getAuthHeaders() });
       toast.success(data.refund_amount > 0
-        ? `Buchung storniert – Erstattung ${data.refund_amount.toFixed(2).replace('.', ',')} € offen`
+        ? `Buchung storniert – Erstattung ${Number(data.refund_amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € offen`
         : 'Buchung storniert');
       fetchBookings();
     } catch (error) {
@@ -288,7 +288,7 @@ const BookingsManagement = () => {
                       {getStatusBadge(booking.payment_status)}
                       {booking.refund_status === 'open' && (
                         <div className="text-xs text-orange-700 mt-1" data-testid={`refund-open-${booking.id}`}>
-                          Erstattung offen: {Number(booking.refund_amount || 0).toFixed(2).replace('.', ',')} €
+                          Erstattung offen: {Number(booking.refund_amount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                         </div>
                       )}
                       {booking.payment_status === 'transfer_pending' && booking.transfer_due_date && (
@@ -435,7 +435,7 @@ const BookingsManagement = () => {
           </p>
           {selectedBooking && (() => {
             const p = cancellationPreview(selectedBooking);
-            const eur = (v) => `${v.toFixed(2).replace('.', ',')} €`;
+            const eur = (v) => `${Number(v).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
             return (
               <div className="text-sm bg-[#F5F2EA] rounded-md p-3 space-y-1" data-testid="cancel-refund-preview">
                 <div>Gast: <strong>{selectedBooking.first_name} {selectedBooking.last_name}</strong> · Anreise in {p.days} Tagen</div>
