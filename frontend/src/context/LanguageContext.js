@@ -192,7 +192,8 @@ const LanguageContext = createContext();
 export const LanguageProvider = ({ children }) => {
   const [language, setLanguage] = useState(() => {
     const saved = localStorage.getItem('hbh_language');
-    return saved || 'de';
+    if (saved) return saved;
+    return (navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en';
   });
 
   useEffect(() => {

@@ -245,10 +245,38 @@ async def process_bank_transfers():
         logger.info(f"Bank transfers processed: {reminded} reminded, {expired} expired")
     return {"reminded": reminded, "expired": expired}
 
+GERMAN_SPEAKING = {"de", "deu", "ger", "at", "aut", "ch", "che", "li", "lie", "germany", "austria", "switzerland", "suisse", "svizzera", "liechtenstein"}
+
+def booking_language(country: Optional[str], fallback: Optional[str] = "de") -> str:
+    """German for DACH countries, English for all others; website language only if no country given."""
+    c = (country or "").strip().lower().rstrip(".")
+    if not c:
+        return fallback if fallback in ("de", "en") else "de"
+    german = c in GERMAN_SPEAKING or any(w in c for w in ("deutsch", "österreich", "oesterreich", "schweiz", "germany", "austria", "switzerland"))
+    return "de" if german else "en"
+
+async def migrate_booking_languages():
+    """One-time: bookings from non-German-speaking countries that were stored as German are switched to English."""
+    key = "booking_language_by_country_2026_11"
+    if await db.migrations.find_one({"id": key}):
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    candidates = await db.bookings.find({"language": {"$ne": "en"}}, {"_id": 0, "id": 1, "booking_number": 1, "country": 1}).to_list(10000)
+    fix = [b for b in candidates if (b.get("country") or "").strip() and booking_language(b["country"]) == "en"]
+    if fix:
+        await db.bookings.update_many({"id": {"$in": [b["id"] for b in fix]}}, {"$set": {"language": "en", "updated_at": now},
+            "$push": {"edit_history": {"at": now, "by": "system", "changes": {"language": {"from": "de", "to": "en"}}}}})
+    await db.migrations.insert_one({"id": key, "at": now, "count": len(fix), "bookings": [f"{b['booking_number']} ({b['country']})" for b in fix]})
+    logger.info(f"Language migration: {len(fix)} bookings switched to English")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - start scheduler on startup, shutdown on exit."""
     # Startup
+    try:
+        await migrate_booking_languages()
+    except Exception as e:
+        logger.error(f"Language migration failed: {e}")
     scheduler.add_job(
         send_automated_reminders,
         CronTrigger(day_of_week='mon', hour=9, minute=0),
@@ -1354,7 +1382,7 @@ async def create_paypal_order(order_data: PayPalOrderRequest):
         "notes": order_data.notes,
         "payment_status": "pending",
         "payment_method": "paypal",
-        "language": order_data.language or "de",
+        "language": booking_language(order_data.country, order_data.language),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -1490,7 +1518,7 @@ async def create_bank_transfer_booking(order_data: PayPalOrderRequest):
         "notes": order_data.notes,
         "payment_status": "pending",
         "payment_method": "bank_transfer",
-        "language": order_data.language or "de",
+        "language": booking_language(order_data.country, order_data.language),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.bookings.insert_one(booking)
