@@ -5,7 +5,7 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import MarginAnalytics from './MarginAnalytics';
-import { Loader2, TrendingUp, TrendingDown, Euro, CalendarCheck, Hotel, Users } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Euro, CalendarCheck, Hotel, Wallet } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -57,6 +57,7 @@ const AnalyticsDashboard = () => {
     // Revenue calculations
     const totalRevenue = paidBookings.reduce((sum, b) => sum + (b.total_price || 0), 0);
     const depositRevenue = paidBookings.reduce((sum, b) => sum + (b.deposit_amount || 0), 0);
+    const receivedTotal = paidBookings.reduce((sum, b) => sum + (b.payment_status === 'fully_paid' ? (b.total_price || 0) : (b.deposit_amount || 0)), 0);
     const pendingRevenue = paidBookings.reduce((sum, b) => {
       if (b.payment_status === 'deposit_paid') {
         return sum + (b.remaining_amount || 0);
@@ -132,6 +133,7 @@ const AnalyticsDashboard = () => {
       cancelledBookings: cancelledBookings.length,
       totalRevenue,
       depositRevenue,
+      receivedTotal,
       pendingRevenue,
       thisMonthBookings: thisMonthBookings.length,
       lastMonthBookings: lastMonthBookings.length,
@@ -192,18 +194,18 @@ const AnalyticsDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-[#E5E0D5]">
+        <Card className="border-[#E5E0D5]" data-testid="kpi-deposits-received">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-[#4A4A4A]">{language === 'de' ? 'Bezahlte Buchungen' : 'Paid Bookings'}</p>
-                <p className="text-2xl font-bold text-[#1A1A1A]">{analytics.paidBookings}</p>
+                <p className="text-sm text-[#4A4A4A]">{language === 'de' ? 'Erhaltene Anzahlungen' : 'Deposits received'}</p>
+                <p className="text-2xl font-bold text-[#1A1A1A]">{formatPrice(analytics.depositRevenue)} €</p>
                 <p className="text-xs text-[#4A4A4A] mt-1">
-                  {analytics.fullyPaidBookings} {language === 'de' ? 'vollständig bezahlt' : 'fully paid'}
+                  {language === 'de' ? 'Insgesamt erhalten' : 'Total received'}: {formatPrice(analytics.receivedTotal)} €
                 </p>
               </div>
-              <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                <CalendarCheck className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-[#D4AF37] rounded-lg flex items-center justify-center">
+                <Wallet className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
@@ -216,7 +218,7 @@ const AnalyticsDashboard = () => {
                 <p className="text-sm text-[#4A4A4A]">{language === 'de' ? 'Ausstehende Zahlungen' : 'Pending Payments'}</p>
                 <p className="text-2xl font-bold text-[#1A1A1A]">{formatPrice(analytics.pendingRevenue)} €</p>
                 <p className="text-xs text-[#4A4A4A] mt-1">
-                  {language === 'de' ? 'Noch zu zahlen (75%)' : 'Remaining balance (75%)'}
+                  {language === 'de' ? 'Noch offen bei angezahlten Buchungen' : 'Open balance on deposit-paid bookings'}
                 </p>
               </div>
               <div className="w-12 h-12 bg-yellow-500 rounded-lg flex items-center justify-center">
@@ -230,14 +232,14 @@ const AnalyticsDashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-[#4A4A4A]">{language === 'de' ? 'Check-ins (7 Tage)' : 'Check-ins (7 days)'}</p>
-                <p className="text-2xl font-bold text-[#1A1A1A]">{analytics.upcomingCheckIns}</p>
+                <p className="text-sm text-[#4A4A4A]">{language === 'de' ? 'Bezahlte Buchungen' : 'Paid Bookings'}</p>
+                <p className="text-2xl font-bold text-[#1A1A1A]">{analytics.paidBookings}</p>
                 <p className="text-xs text-[#4A4A4A] mt-1">
-                  {language === 'de' ? 'Ankommende Gäste' : 'Arriving guests'}
+                  {analytics.fullyPaidBookings} {language === 'de' ? 'vollständig bezahlt' : 'fully paid'}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                <CalendarCheck className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
