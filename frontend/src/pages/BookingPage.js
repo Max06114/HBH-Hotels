@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { CalendarIcon, ArrowLeft, Loader2, CreditCard, Landmark } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
+import { paypalContext } from '../lib/paypalContext';
 
 // Import booking components
 import { RoomTypeSelector, GuestInfoForm, BookingSummary } from '../components/booking';
@@ -33,6 +34,9 @@ const BookingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const paypalOrderRef = useRef(null);
+  const paypalFundingRef = useRef(null);
+  const paypalOpenedRef = useRef(null);
+  const [paypalTrouble, setPaypalTrouble] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('paypal');
 
   const buildBookingData = (method) => ({
@@ -366,6 +370,22 @@ const BookingPage = () => {
                       {/* PayPal Button */}
                       {priceInfo && paymentMethod === 'paypal' && (
                         <div className="mt-2">
+                          {paypalTrouble && (
+                            <div className="mb-4 rounded-lg border-2 border-[#D4AF37] bg-[#FBF6E6] p-4 text-sm" data-testid="paypal-trouble-hint">
+                              <p className="font-semibold text-[#1A1A1A] mb-1">
+                                {language === 'de' ? 'Probleme mit PayPal?' : 'Trouble with PayPal?'}
+                              </p>
+                              <p className="text-[#4A4A4A] mb-3">
+                                {language === 'de'
+                                  ? 'Sie können Ihr Zimmer auch verbindlich reservieren und die Anzahlung bequem per Banküberweisung leisten.'
+                                  : 'You can also reserve your room and pay the deposit conveniently by bank transfer.'}
+                              </p>
+                              <Button type="button" onClick={() => { setPaymentMethod('bank_transfer'); setPaypalTrouble(false); }}
+                                className="bg-[#6B1D2A] hover:bg-[#561622] text-white rounded-full" data-testid="paypal-trouble-switch-transfer">
+                                <Landmark className="w-4 h-4 mr-2" />{language === 'de' ? 'Per Überweisung reservieren' : 'Reserve with bank transfer'}
+                              </Button>
+                            </div>
+                          )}
                           <p className="text-center text-sm text-[#4A4A4A] mb-4">
                             {language === 'de' 
                               ? 'Bezahlen Sie sicher mit PayPal oder Kreditkarte:' 
@@ -385,6 +405,7 @@ const BookingPage = () => {
                               height: 50
                             }}
                             disabled={submitting}
+                            onClick={(data) => { paypalFundingRef.current = data?.fundingSource; paypalOpenedRef.current = Date.now(); }}
                             createOrder={async () => {
                               if (!validateForm()) throw new Error('Validation failed');
                               
@@ -412,6 +433,7 @@ const BookingPage = () => {
                                   toast.success(language === 'de' ? 'Zahlung erfolgreich!' : 'Payment successful!');
                                   navigate(`/booking/confirmation?method=paypal&booking_id=${response.data.booking_id}`);
                                 } else {
+                                  setPaypalTrouble(true);
                                   toast.error(paymentDeclinedMessage(response.data.error_code), { duration: 12000 });
                                 }
                               } catch (error) {
@@ -422,12 +444,14 @@ const BookingPage = () => {
                             }}
                             onError={(err) => {
                               console.error('PayPal Error:', err);
-                              reportPayPalEvent('paypal_error', err?.message || String(err));
+                              reportPayPalEvent('paypal_error', `${String(err?.message || err).slice(0, 200)} · ${paypalContext(paypalFundingRef.current, paypalOpenedRef.current)}`);
+                              setPaypalTrouble(true);
                               toast.error(paymentDeclinedMessage(), { duration: 12000 });
                               setSubmitting(false);
                             }}
                             onCancel={(data) => {
-                              reportPayPalEvent('cancelled', null, data?.orderID);
+                              reportPayPalEvent('cancelled', paypalContext(paypalFundingRef.current, paypalOpenedRef.current), data?.orderID);
+                              setPaypalTrouble(true);
                               toast.info(language === 'de' ? 'Zahlung abgebrochen' : 'Payment cancelled');
                               setSubmitting(false);
                             }}

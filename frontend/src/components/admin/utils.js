@@ -162,7 +162,9 @@ export const getPaymentEventLabel = (lastEvent, language = 'de') => {
   if (!lastEvent) return null;
   const base = PAYMENT_EVENT_LABELS[language]?.[lastEvent.event] || lastEvent.event;
   const code = lastEvent.paypal_error?.code;
-  if (!code) return base;
+  const context = ['cancelled', 'paypal_error'].includes(lastEvent.event) && lastEvent.detail && lastEvent.detail !== base
+    && !lastEvent.detail.startsWith('Vom Gast') && !lastEvent.detail.startsWith('Fehler im') ? ` (${lastEvent.detail})` : '';
+  if (!code) return base + context;
   const issue = PAYPAL_ISSUE_LABELS[code]?.[language] || code;
   return `${base}: ${issue}`;
 };
