@@ -2901,6 +2901,8 @@ async def admin_margin_analytics(admin: dict = Depends(get_current_admin)):
     bookings = await db.bookings.find({"payment_status": {"$in": ["deposit_paid", "fully_paid"]}}, {"_id": 0}).to_list(10000)
     hotels, missing = {}, []
     for b in bookings:
+        if (b.get("hotel_name") or "").upper().startswith("TEST"):
+            continue
         ek = purchase_price(b.get("hotel_name"), b.get("room_type"))
         h = hotels.setdefault(b.get("hotel_id"), {"hotel_id": b.get("hotel_id"), "hotel_name": b.get("hotel_name"), "bookings": 0, "nights": 0,
                                                   "revenue": 0.0, "purchase": 0.0, "margin": 0.0, "margin_tax": 0.0, "net_margin": 0.0})

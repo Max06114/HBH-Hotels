@@ -271,3 +271,4 @@ Hotel booking platform for the "Happy Birthday Händel" festival in Halle, Germa
 - 2026-11: Analytics-KPIs: Gesamtumsatz · Erhaltene Anzahlungen (Summe deposit_amount, Unterzeile insgesamt erhalten) · Ausstehende Zahlungen · Bezahlte Buchungen; Check-ins-Kachel entfernt.
 - 2026-11: Alle Admin-Beträge mit Tausenderpunkt (de-DE, z. B. 47.234,50).
 - 2026-11: PayPal-Abbruch: Hinweisbox „Probleme mit PayPal? → Per Überweisung reservieren“ nach Abbruch/Fehler/Ablehnung; Abbruch-Event speichert Zahlungsart (Karte/PayPal-Konto), Gerät, Browser/App, Sekunden offen (frontend/src/lib/paypalContext.js); Admin zeigt es in Klammern hinter „Vom Gast … abgebrochen“.
+- 2026-11: Hotels-Admin: „Als Test kopieren“ (Kopie deaktiviert, Name „TEST – …“, alle Preise 0,25 €, ohne Kontingent = unbegrenzt) + „Buchungsseite“ öffnen (/booking/{id}, auch für deaktivierte Hotels). TEST-Hotels werden in der Margen-Auswertung ignoriert.

@@ -10,7 +10,7 @@ import { Textarea } from '../ui/textarea';
 import { Card, CardContent } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Badge } from '../ui/badge';
-import { Plus, Edit, Trash2, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Loader2, ChevronUp, ChevronDown, Copy, ExternalLink } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -133,6 +133,20 @@ const HotelsManagement = () => {
     }
   };
 
+  const handleCopyAsTest = async (hotel) => {
+    const { id, created_at, inventory, auto_deactivated, sold_out_at, reactivated_at, sort_order, ...rest } = hotel;
+    const prices = ['single_price', 'double_price', 'twin_price', 'single_comfort_price', 'double_comfort_price', 'twin_comfort_price'];
+    const copy = { ...rest, name: `TEST – ${hotel.name}`, active: false, inventory: null };
+    prices.forEach((k) => { if (copy[k]) copy[k] = 0.25; });
+    try {
+      await axios.post(`${API}/admin/hotels`, copy, { headers: getAuthHeaders() });
+      toast.success('Testkopie angelegt: deaktiviert, alle Preise 0,25 € – über „Buchungsseite“ öffnen');
+      fetchHotels();
+    } catch (error) {
+      toast.error('Kopieren fehlgeschlagen');
+    }
+  };
+
   const handleDelete = async (hotelId) => {
     if (!window.confirm(language === 'de' ? 'Hotel wirklich löschen?' : 'Really delete hotel?')) return;
     try {
@@ -219,6 +233,12 @@ const HotelsManagement = () => {
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => handleEdit(hotel)} data-testid={`edit-hotel-${hotel.id}`}>
                   <Edit className="w-4 h-4 mr-1" /> {t('edit')}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleCopyAsTest(hotel)} data-testid={`copy-hotel-${hotel.id}`}>
+                  <Copy className="w-4 h-4 mr-1" /> Als Test kopieren
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => window.open(`/booking/${hotel.id}`, '_blank')} data-testid={`open-booking-${hotel.id}`}>
+                  <ExternalLink className="w-4 h-4 mr-1" /> Buchungsseite
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => handleDelete(hotel.id)} className="text-red-600">
                   <Trash2 className="w-4 h-4 mr-1" /> {t('delete')}
